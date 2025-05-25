@@ -1,0 +1,323 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-FileCopyrightText: 2026 Eli2
+#include "task.h"
+
+#include <vector>
+
+#include "blocking_queue.h"
+#include "db_common.h"
+#include "task/analyze.h"
+#include "task/export.h"
+#include "task/import.h"
+#include "task/load.h"
+#include "task/modland.h"
+#include "task_util.h"
+#include "util/hash_util.h"
+#include "util/sqlite_util.h"
+#include "util/str_util.h"
+#include "util/thread_util.h"
+#include "util/timer_util.h"
+#include "db.h"
+#include "log.h"
+
+
+class Poison {
+	
+};
+
+static void exec(sqlite3* db, const char* sql) {
+	SQLITE_FREE char *msg = nullptr;
+	int rc = sqlite3_exec(db, sql, 0, 0, &msg);
+	if(rc != SQLITE_OK){
+		log_error("SQL error: {} -> {}", sql, msg);
+	}
+}
+
+struct UpdateFulltextSearchIndex {
+	
+	void run(sqlite3* db) {
+		log_debug("Updating fulltext index ...");
+		Timer timer;
+		
+		if(!sqliteu_begin(db)) {
+			log_error("BEGIN failed: {}", sqlite3_errmsg(db));
+			return;
+		}
+		auto sql = R"(
+			DELETE FROM text_index;
+			;
+			INSERT INTO text_index(
+				id,
+				file_name,
+				name,
+				artist
+			)
+			SELECT
+				meta.id,
+				meta.file_name,
+				meta.name,
+				modland.artist
+			FROM
+				meta
+			LEFT JOIN modland
+				ON modland.md5 == meta.md5
+			;
+		)";
+		exec(db, sql);
+		if(!sqliteu_commit(db)) {
+			log_error("COMMIT failed: {}", sqlite3_errmsg(db));
+		}
+
+		log_debug("Fulltext done in: {}ms", timer.markMs());
+	}
+};
+
+struct MarkTracksForAnalysis {
+	
+	void run(sqlite3* db) {
+		auto sql = R"(
+			UPDATE meta
+			SET todo=1
+			WHERE
+				(todo == 0) AND (
+					(type IS NULL) OR
+					(bpm IS NULL) OR
+					(duration IS NULL) OR
+					(loudness IS NULL)
+				)
+			;
+		)";
+		
+		SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+		int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
+		if (rc != SQLITE_OK) {
+			log_error("prepare failed: {}", sqlite3_errmsg(db));
+			return;
+		}
+		
+		rc = sqlite3_step(stmt);
+		if (rc != SQLITE_DONE) {
+			log_error("step failed: {}", sqlite3_errmsg(db));
+			return;
+		}
+	}
+};
+
+// ============================================================================
+
+
+
+class ModlandPullFilenames {
+	
+
+};
+
+struct ModlandListSupportedFormats {
+};
+
+
+
+struct ModlandDownloadMissingFiles {
+	
+};
+
+struct Analyze {
+	
+};
+
+struct Load {
+	std::filesystem::path path;
+};
+
+struct ImportPlay {
+	std::filesystem::path path;
+};
+
+struct ExportPlaylist {
+	std::filesystem::path directory;
+	std::string playlist_name;
+	std::vector<ExportTrack> tracks;
+};
+
+// ============================================================================
+
+using Tasks = std::variant<
+	Poison,
+	Load,
+	Analyze,
+	UpdateFulltextSearchIndex,
+	MarkTracksForAnalysis,
+	ModlandPullFilenames,
+	ModlandListSupportedFormats,
+	ModlandDownloadMissingFiles,
+	ImportPlay,
+	ExportPlaylist
+>; 
+
+static queue<Tasks>     g_taskQueue;
+static std::thread      g_taskThread;
+static TaskControl      g_taskControl;
+static LockedString     g_currentTaskName;
+
+template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
+
+static std::string task_name(const Tasks &t) {
+	return std::visit(overload{
+		[](const Poison &)                        { return std::string(""); },
+		[](const Load &t)                         { return std::format("Load: {}", t.path.filename().string()); },
+		[](const Analyze &)                       { return std::string("Analyze tracks"); },
+		[](const UpdateFulltextSearchIndex &)     { return std::string("Update fulltext index"); },
+		[](const MarkTracksForAnalysis &)         { return std::string("Mark tracks for analysis"); },
+		[](const ModlandPullFilenames &)          { return std::string("Modland: pull filenames"); },
+		[](const ModlandListSupportedFormats &)   { return std::string("Modland: list formats"); },
+		[](const ModlandDownloadMissingFiles &)   { return std::string("Modland: download missing"); },
+		[](const ImportPlay &t)                   { return std::format("Import play: {}", t.path.filename().string()); },
+		[](const ExportPlaylist &t)               { return std::format("Export: {}", t.playlist_name); },
+	}, t);
+}
+
+void task_init(AppState &app) {
+	
+	g_taskThread = std::thread([&](){
+		SQLITE_CLOSE sqlite3* db = db_open(app);
+		if(!db) {
+			log_error("Failed to open task DB connection");
+			return;
+		}
+
+		sqlite3_busy_timeout(db, 60*1000);
+		
+		while(true) {
+			auto q = g_taskQueue.pop();
+
+			g_taskControl.abort = false;
+			g_taskControl.statusline.set("");
+			g_taskControl.statusline2.set("");
+			g_currentTaskName.set(task_name(q));
+			
+			bool exit = false;
+			std::visit(overload{
+				[&](Poison &p){
+					log_info("Task worker poisoned");
+					exit = true;
+				},
+				[&](Load &t){
+					load_run(g_taskControl, db, t.path);
+				},
+				[&](Analyze &t){
+					analyze_run(g_taskControl, db);
+				},
+				[&](UpdateFulltextSearchIndex &t){
+					t.run(db);
+				},
+				[&](MarkTracksForAnalysis &h){
+					h.run(db);
+				},
+				[&](ModlandPullFilenames &h){
+					modland_update_index(g_taskControl, db);
+				},
+				[&](ModlandListSupportedFormats &h){
+					modland_probe_formats(g_taskControl, db);
+				},
+				[&](ModlandDownloadMissingFiles &h){
+					modland_download(g_taskControl, db);
+				},
+				[&](ImportPlay &t){
+					import_playstats(g_taskControl, db, t.path);
+				},
+				[&](ExportPlaylist &t){
+					export_playlist_run(g_taskControl, db, t.directory, t.playlist_name, t.tracks);
+				}
+			}, q);
+
+			g_currentTaskName.set("");
+			//g_taskControl.statusline.set("");
+			g_taskControl.statusline2.set("DONE");
+
+			if(exit) {
+				break;
+			}
+		}
+	});
+	thread_set_name(g_taskThread, "db_task");
+}
+
+void task_quit(AppState &app) {
+	g_taskQueue.push(Poison());
+	g_taskControl.abort = true;
+	if(g_taskThread.joinable())
+		g_taskThread.join();
+}
+
+void task_stop_current() {
+	g_taskControl.abort = true;
+}
+
+std::string task_get_statusline() {
+	auto l1 = g_taskControl.statusline.get();
+	auto l2 = g_taskControl.statusline2.get();
+
+	return std::format("{}\n{}", l1, l2);
+}
+
+TaskQueueInfo task_get_queue_info() {
+	TaskQueueInfo info;
+	info.current_task = g_currentTaskName.get();
+	for(auto &t : g_taskQueue.snapshot()) {
+		auto name = task_name(t);
+		if(!name.empty())
+			info.queued.push_back(std::move(name));
+	}
+	return info;
+}
+
+void task_remove_queued(size_t index) {
+	g_taskQueue.remove(index);
+}
+
+void task_load(std::filesystem::path path) {
+	Load l;
+	l.path = path;
+	g_taskQueue.push(l);
+}
+
+void task_analyze() {
+	g_taskQueue.push(Analyze());
+}
+
+void task_update_fulltext_search() {
+	g_taskQueue.push(UpdateFulltextSearchIndex());
+}
+
+void task_mark_tracks_for_analysis() {
+	g_taskQueue.push(MarkTracksForAnalysis());
+}
+
+
+void task_pull_modland_file_names() {
+	g_taskQueue.push(ModlandPullFilenames());
+}
+
+void task_pull_modland_list_supported_formats() {
+	g_taskQueue.push(ModlandListSupportedFormats());
+}
+
+void task_modland_download_missing_files() {
+	g_taskQueue.push(ModlandDownloadMissingFiles());
+}
+
+void task_import_play(std::filesystem::path path) {
+	g_taskQueue.push(ImportPlay(path));
+}
+
+void task_export_playlist(
+	std::filesystem::path directory,
+	std::string playlist_name,
+	std::vector<ExportTrack> tracks)
+{
+	ExportPlaylist ep;
+	ep.directory = std::move(directory);
+	ep.playlist_name = std::move(playlist_name);
+	ep.tracks = std::move(tracks);
+	g_taskQueue.push(std::move(ep));
+}

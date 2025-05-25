@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025-2026 Eli2
+name: Build
+on:
+  push:
+    branches:
+      - master
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    - name: prepare
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        sudo apt update -y --fix-missing
+    - name: install
+      run: >
+        sudo apt install
+        build-essential
+        cmake
+        ninja-build
+        catch2
+        libfmt-dev
+        libarchive-dev
+        libzstd-dev
+        libsqlite3-dev
+        libopenal-dev
+        libxmp-dev
+        libebur128-dev
+        libsystemd-dev
+        libcurl4-openssl-dev
+        gnome-desktop-testing
+        libasound2-dev
+        libpulse-dev
+        libaudio-dev
+        libjack-dev
+        libsndio-dev
+        libx11-dev
+        libxext-dev
+        libxrandr-dev
+        libxcursor-dev
+        libxfixes-dev
+        libxi-dev
+        libxss-dev
+        libxtst-dev
+        libxkbcommon-dev
+        libdrm-dev
+        libgbm-dev
+        libgl1-mesa-dev
+        libgles2-mesa-dev
+        libegl1-mesa-dev
+        libdbus-1-dev
+        libibus-1.0-dev
+        libudev-dev
+        libusb-1.0-0-dev
+        libwayland-dev
+        libdecor-0-dev
+        liburing-dev
+        libharfbuzz-dev
+    - name: configure
+      run: |
+        cmake --version
+        mkdir build
+        cd build
+        cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..
+    - name: build
+      run: |
+        cd build
+        cmake --build . --target all
+    - name: test
+      run: |
+        cd build
+        ctest

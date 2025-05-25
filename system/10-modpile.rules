@@ -1,0 +1,2 @@
+SUBSYSTEM=="input", ATTRS{idVendor}=="1a2c", ATTRS{idProduct}=="2124", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a2c", ATTRS{idProduct}=="2124", TAG+="uaccess"
