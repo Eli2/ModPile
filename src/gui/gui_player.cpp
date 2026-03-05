@@ -34,9 +34,18 @@ void gui_player(AppState &app) {
 	ImGui::Text("%s", asd.c_str());
 
 	{
-		int elapsed = app.player.track.elapsed;
-		if(ImGui::SliderInt("##Pos", &elapsed, 0, app.player.track.length)) {
-			app.player.request.position.store(elapsed);
+		static int drag_pos = 0;
+		static bool dragging = false;
+		int display = dragging ? drag_pos : (int)app.player.track.elapsed;
+		ImGui::SliderInt("##Pos", &display, 0, app.player.track.length);
+		if(ImGui::IsItemActive()) {
+			drag_pos = display;
+			dragging = true;
+		} else {
+			dragging = false;
+		}
+		if(ImGui::IsItemDeactivatedAfterEdit()) {
+			app.player.request.position.store(drag_pos);
 		}
 	}
 
