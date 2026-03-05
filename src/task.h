@@ -28,6 +28,7 @@ void task_pull_modland_file_names();
 void task_pull_modland_list_supported_formats();
 void task_modland_download_missing_files();
 void task_import_play(std::filesystem::path path);
+void task_export_play(std::filesystem::path path);
 
 struct ExportTrack {
 	std::string id;

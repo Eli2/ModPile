@@ -66,6 +66,45 @@ static void insert_row(
 	}
 }
 
+void export_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path) {
+	log_debug("Exporting playstats: {}", path.string());
+
+	std::ofstream out(path, std::ios::binary);
+	if(!out) {
+		log_error("Failed to open file for writing: {}", path.string());
+		return;
+	}
+
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+	if(sqlite3_prepare_v2(db, "SELECT * FROM play", -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("prepare failed: {}", sqlite3_errmsg(db));
+		return;
+	}
+
+	int ncols = sqlite3_column_count(stmt);
+
+	// Write header from column names
+	for(int i = 0; i < ncols; i++) {
+		if(i > 0) out << '\t';
+		out << sqlite3_column_name(stmt, i);
+	}
+	out << '\n';
+
+	int rc;
+	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		for(int i = 0; i < ncols; i++) {
+			if(i > 0) out << '\t';
+			const char *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+			if(val) out << val;
+		}
+		out << '\n';
+	}
+	if(rc != SQLITE_DONE) {
+		log_error("step failed: {}", sqlite3_errmsg(db));
+	}
+	log_debug("DONE");
+}
+
 void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path) {
 	
 	log_debug("Importing: {}", path.string());

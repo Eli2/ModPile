@@ -55,9 +55,19 @@ void gui_menu(AppState &app) {
 			ImGui::SetItemTooltip("Compute loudness (EBU R128) and read metadata for all unanalyzed tracks.");
 			if(ImGui::BeginMenu("Database")) {
 				if(ImGui::MenuItem("Import playstats")) {
-					task_import_play("play.tsv");
+					SDL_ShowOpenFileDialog([](void *userdata, const char * const *filelist, int) {
+						if(filelist && *filelist)
+							task_import_play(std::filesystem::path(*filelist));
+					}, nullptr, app.window, nullptr, 0, nullptr, false);
 				}
-				ImGui::SetItemTooltip("Import play history from play.tsv into the database.");
+				ImGui::SetItemTooltip("Import play history from a TSV file into the database.");
+				if(ImGui::MenuItem("Export playstats")) {
+					SDL_ShowSaveFileDialog([](void *userdata, const char * const *filelist, int) {
+						if(filelist && *filelist)
+							task_export_play(std::filesystem::path(*filelist));
+					}, nullptr, app.window, nullptr, 0, "play.tsv");
+				}
+				ImGui::SetItemTooltip("Export play history to a TSV file.");
 				if(ImGui::MenuItem("Update fulltext index")) {
 					task_update_fulltext_search();
 				}

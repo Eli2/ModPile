@@ -6,3 +6,4 @@
 #include "task_util.h"
 
 void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path);
+void export_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path);

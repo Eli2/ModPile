@@ -133,6 +133,10 @@ struct ImportPlay {
 	std::filesystem::path path;
 };
 
+struct ExportPlay {
+	std::filesystem::path path;
+};
+
 struct ExportPlaylist {
 	std::filesystem::path directory;
 	std::string playlist_name;
@@ -151,8 +155,9 @@ using Tasks = std::variant<
 	ModlandListSupportedFormats,
 	ModlandDownloadMissingFiles,
 	ImportPlay,
+	ExportPlay,
 	ExportPlaylist
->; 
+>;
 
 static queue<Tasks>     g_taskQueue;
 static std::thread      g_taskThread;
@@ -172,6 +177,7 @@ static std::string task_name(const Tasks &t) {
 		[](const ModlandListSupportedFormats &)   { return std::string("Modland: list formats"); },
 		[](const ModlandDownloadMissingFiles &)   { return std::string("Modland: download missing"); },
 		[](const ImportPlay &t)                   { return std::format("Import play: {}", t.path.filename().string()); },
+		[](const ExportPlay &t)                   { return std::format("Export play: {}", t.path.filename().string()); },
 		[](const ExportPlaylist &t)               { return std::format("Export: {}", t.playlist_name); },
 	}, t);
 }
@@ -224,6 +230,9 @@ void task_init(AppState &app) {
 				},
 				[&](ImportPlay &t){
 					import_playstats(g_taskControl, db, t.path);
+				},
+				[&](ExportPlay &t){
+					export_playstats(g_taskControl, db, t.path);
 				},
 				[&](ExportPlaylist &t){
 					export_playlist_run(g_taskControl, db, t.directory, t.playlist_name, t.tracks);
@@ -308,6 +317,10 @@ void task_modland_download_missing_files() {
 
 void task_import_play(std::filesystem::path path) {
 	g_taskQueue.push(ImportPlay(path));
+}
+
+void task_export_play(std::filesystem::path path) {
+	g_taskQueue.push(ExportPlay(std::move(path)));
 }
 
 void task_export_playlist(
