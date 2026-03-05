@@ -245,8 +245,21 @@ add_executable(ModPile
 	src/db.cpp
 	src/global.cpp
 	src/global.h
-	src/gui.h
-	src/gui.cpp
+	src/gui/gui.h
+	src/gui/gui.cpp
+	src/gui/gui_common.h
+	src/gui/gui_charts.h
+	src/gui/gui_charts.cpp
+	src/gui/gui_menu.h
+	src/gui/gui_menu.cpp
+	src/gui/gui_misc.h
+	src/gui/gui_misc.cpp
+	src/gui/gui_pile.h
+	src/gui/gui_pile.cpp
+	src/gui/gui_player.h
+	src/gui/gui_player.cpp
+	src/gui/gui_playlist.h
+	src/gui/gui_playlist.cpp
 	src/setup.h
 	src/setup.cpp
 	src/mpris.h
@@ -266,7 +279,7 @@ add_executable(ModPile
 	src/query.cpp
 	src/tray.h
 	src/tray.cpp
-	src/visualizer.h
+	src/visualizer/visualizer.h
 	src/visualizer/visualizer.cpp
 	src/visualizer/visualizer_common.h
 	src/visualizer/visualizer_utils.cpp
@@ -281,6 +294,7 @@ add_executable(ModPile
 
 target_include_directories(ModPile PRIVATE
 	src/
+	src/gui/
 	src/visualizer/
 	${kissfft_SOURCE_DIR}/tools
 )

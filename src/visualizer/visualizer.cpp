@@ -6,13 +6,12 @@
 //   1. Add an enum value to VisMode in visualizer_common.h.
 //   2. Create visualizer_<name>.h/.cpp with init/render/quit functions.
 //   3. Add the radio button and dispatch cases below.
-
+#include "visualizer.h"
 #include "visualizer_common.h"
 #include "visualizer_bars.h"
 #include "visualizer_2d_spectrogram.h"
 #include "visualizer_3d_spectrogram.h"
 
-#include "../visualizer.h"
 #include "../global.h"
 #include "../log.h"
 

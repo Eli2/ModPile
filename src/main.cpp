@@ -25,7 +25,7 @@
 #include "query.h"
 #include "db.h"
 #include "global.h"
-#include "gui.h"
+#include "gui/gui.h"
 #include "log.h"
 #include "mpris.h"
 #include "numblock.h"
