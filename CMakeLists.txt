@@ -22,6 +22,7 @@ option(MODPILE_USE_SYSTEM_SDL        "Use system SDL"        OFF)
 option(MODPILE_USE_SYSTEM_EBUR128    "Use system ebur128"    ON)
 option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    OFF)
 option(MODPILE_USE_SYSTEM_GLM        "Use system glm"        ON)
+option(MODPILE_ENABLE_MPRIS          "Enable MPRIS D-Bus support (requires libsystemd)" ON)
 
 message(STATUS "=======================================")
 
@@ -59,7 +60,12 @@ message(STATUS "=======================================")
 
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
+if(MODPILE_ENABLE_MPRIS)
+	pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
+	message(STATUS "MPRIS support enabled")
+else()
+	message(STATUS "MPRIS support disabled")
+endif()
 
 
 
@@ -311,6 +317,10 @@ target_compile_features(ModPile PRIVATE
 	cxx_std_20
 )
 
+if(MODPILE_ENABLE_MPRIS)
+	target_compile_definitions(ModPile PRIVATE HAVE_MPRIS)
+endif()
+
 set_target_properties(ModPile PROPERTIES
 	LINK_FLAGS_RELEASE -s
 )
@@ -318,7 +328,7 @@ set_target_properties(ModPile PROPERTIES
 target_link_libraries(ModPile PRIVATE
 	LibArchive::LibArchive
 	SQLite::SQLite3
-	systemd
+	$<$<BOOL:${MODPILE_ENABLE_MPRIS}>:systemd>
 	SDL3::SDL3
 	SDL3_image::SDL3_image
 	SDL3_ttf::SDL3_ttf

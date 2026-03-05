@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2026 Eli2
-#include <format>
 #include "mpris.h"
+
+#ifdef HAVE_MPRIS
+
+#include <format>
 #include "log.h"
 
 #include <algorithm>
@@ -896,3 +899,11 @@ void mpris_quit()
 	sd_bus_flush_close_unref(g_dbus);
 	g_dbus = nullptr;
 }
+
+#else // HAVE_MPRIS
+
+void mpris_init(AppState &) {}
+void mpris_iterate(AppState &) {}
+void mpris_quit() {}
+
+#endif // HAVE_MPRIS
