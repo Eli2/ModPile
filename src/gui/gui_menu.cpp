@@ -48,31 +48,39 @@ void gui_menu(AppState &app) {
 			if(ImGui::MenuItem("Stop current")) {
 				task_stop_current();
 			}
+			ImGui::SetItemTooltip("Abort the currently running background task.");
 			if(ImGui::MenuItem("Analyze tracks")) {
 				task_analyze();
 			}
+			ImGui::SetItemTooltip("Compute loudness (EBU R128) and read metadata for all unanalyzed tracks.");
 			if(ImGui::BeginMenu("Database")) {
 				if(ImGui::MenuItem("Import playstats")) {
 					task_import_play("play.tsv");
 				}
+				ImGui::SetItemTooltip("Import play history from play.tsv into the database.");
 				if(ImGui::MenuItem("Update fulltext index")) {
 					task_update_fulltext_search();
 				}
+				ImGui::SetItemTooltip("Rebuild the FTS5 full-text search index.");
 				if(ImGui::MenuItem("Update missing metadata")) {
 					task_mark_tracks_for_analysis();
 				}
+				ImGui::SetItemTooltip("Queue tracks that are missing metadata for re-analysis.");
 				ImGui::EndMenu();
 			}
 			if(ImGui::BeginMenu("Modland")) {
 				if(ImGui::MenuItem("Pull file names")) {
 					task_pull_modland_file_names();
 				}
+				ImGui::SetItemTooltip("Download the Modland file list and update the local index.");
 				if(ImGui::MenuItem("List supported formats")) {
 					task_pull_modland_list_supported_formats();
 				}
+				ImGui::SetItemTooltip("Probe each Modland format to determine which ones libxmp can play.");
 				if(ImGui::MenuItem("Download missing files")) {
 					task_modland_download_missing_files();
 				}
+				ImGui::SetItemTooltip("Download Modland tracks not yet present in the collection (supported formats only).");
 				ImGui::EndMenu();
 			}
 			ImGui::EndMenu();
