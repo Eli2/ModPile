@@ -51,8 +51,13 @@ bool db_get_file(sqlite3 *db, const std::string id, FileRow &file) {
 	auto decompSize = sqlite3_column_int64(stmt, 2);
 	auto compData = sqlite3_column_blob(stmt, 3);
 	auto compSize = sqlite3_column_bytes(stmt, 3);
-	
-	file.rawData.resize(decompSize);
+
+	if(decompSize <= 0 || !compData) {
+		log_error("Invalid file blob for id {}: decompSize={} compData={}", id, decompSize, compData ? "ok" : "null");
+		return false;
+	}
+
+	file.rawData.resize(static_cast<size_t>(decompSize));
 	auto size = ZSTD_decompress(file.rawData.data(), file.rawData.size(), compData, compSize);
 	if(ZSTD_isError(size)) {
 		log_error("Failed to decompress: {} -> {}", id, ZSTD_getErrorName(size));

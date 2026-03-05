@@ -103,7 +103,10 @@ static void readFile(TaskControl &tc, sqlite3* db, const int depth, const fs::pa
 			buffer.resize(length);
 			std::ifstream inputFile(path, std::ios_base::binary);
 			inputFile.read(reinterpret_cast<char*>(buffer.data()), length);
-			inputFile.close();
+			if(!inputFile) {
+				log_error("Failed to read file: {}", path.string());
+				return;
+			}
 		}
 		
 		parseModFoo(tc, db, path.filename(), buffer);
