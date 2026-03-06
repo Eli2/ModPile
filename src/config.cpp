@@ -11,6 +11,11 @@
 namespace fs = std::filesystem;
 
 static fs::path g_configFile;
+static fs::path g_layoutFile;
+
+// ─── Layout path ──────────────────────────────────────────────────────────────
+
+fs::path config_get_layout_path() { return g_layoutFile; }
 
 // ─── Load ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +38,7 @@ void config_load(AppState &app) {
 	log_info("Using config path: {}", configDir.string());
 
 	g_configFile = configDir / "ModPile.cfg";
+	g_layoutFile = configDir / "imgui_layout.ini";
 
 	if(!fs::exists(g_configFile)) return;
 

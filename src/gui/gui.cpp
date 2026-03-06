@@ -18,9 +18,15 @@
 #include "imgui.h"
 
 #include "visualizer.h"
+#include "config.h"
 #include "global.h"
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+
 static bool g_gui_inited = false;
+static bool g_layout_loaded = false;
 
 void gui_init(AppState &app) {
 	IMGUI_CHECKVERSION();
@@ -37,12 +43,28 @@ void gui_init(AppState &app) {
 	ImGui_ImplSDL3_InitForOpenGL(app.window, app.gl_context);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
+	auto layoutPath = config_get_layout_path();
+	if(std::filesystem::exists(layoutPath)) {
+		std::ifstream f(layoutPath, std::ios::binary);
+		std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+		ImGui::LoadIniSettingsFromMemory(data.c_str(), data.size());
+		g_layout_loaded = true;
+	}
+
 	g_gui_inited = true;
 }
 
 void gui_quit(AppState &app) {
 	if(!g_gui_inited)
 		return;
+
+	auto layoutPath = config_get_layout_path();
+	auto layoutDir = layoutPath.parent_path();
+	if(!std::filesystem::exists(layoutDir))
+		std::filesystem::create_directories(layoutDir);
+	size_t iniSize = 0;
+	const char* iniData = ImGui::SaveIniSettingsToMemory(&iniSize);
+	std::ofstream(layoutPath, std::ios::binary).write(iniData, static_cast<std::streamsize>(iniSize));
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
@@ -59,7 +81,7 @@ void gui_iterate(AppState &app) {
 	auto dockspace = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar);
 
 	static auto dockInit = true;
-	if(dockInit) {
+	if(dockInit && !g_layout_loaded) {
 		dockInit = false;
 
 		ImGui::DockBuilderRemoveNodeChildNodes(dockspace);
