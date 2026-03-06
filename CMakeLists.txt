@@ -90,7 +90,7 @@ else()
 endif()
 
 if(MODPILE_USE_SYSTEM_SDL)
-	find_package(sdl3 REQUIRED)
+	find_package(SDL3 REQUIRED)
 else()
 	set(SDL_SHARED OFF)
 	set(SDL_STATIC ON)
