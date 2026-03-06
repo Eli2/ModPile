@@ -44,19 +44,19 @@ struct BarRingBuffer {
 	}
 };
 
-// ─── Mode ────────────────────────────────────────────────────────────────────
+// ─── Per-visualizer framebuffer ──────────────────────────────────────────────
 
-// To add a new visualizer:
-//   1. Add an enum value here.
-//   2. Create visualizer_<name>.h/.cpp with init/render/quit functions.
-//   3. Add the radio button and dispatch cases in visualizer.cpp.
-enum class VisMode { Bars, Spectrogram2D, Spectrogram3D };
+struct VisFbo {
+	GLuint fbo = 0, fbo_tex = 0, fbo_rbo = 0;
+	int w = 0, h = 0;
+};
 
 // ─── Shared state ────────────────────────────────────────────────────────────
 
+// To add a new visualizer:
+//   1. Create visualizer_<name>.h/.cpp with init/render/quit functions.
+//   2. Add a VisFbo and window in visualizer.cpp.
 struct VisCommon {
-	VisMode mode = VisMode::Bars;
-
 	// Mono accumulation — sliding window fed from the audio ring buffer.
 	std::array<float, FFT_SIZE> mono_buf{};
 	int mono_count = 0;
@@ -72,10 +72,6 @@ struct VisCommon {
 	//                 2D Spectrogram reads the full buffer.
 	std::array<float, NUM_BARS> bar_heights{};
 	BarRingBuffer<HISTORY_SIZE_2D> history;
-
-	// FBO shared across all modes.
-	GLuint fbo = 0, fbo_tex = 0, fbo_rbo = 0;
-	int fbo_w = 0, fbo_h = 0;
 };
 
 // Single instance, defined in visualizer_utils.cpp.
@@ -85,5 +81,6 @@ extern VisCommon g_vis;
 
 GLuint compile_shader(GLenum type, const char* src);
 GLuint link_program(const char* vert_src, const char* frag_src);
-void   recreate_fbo(int w, int h);
+void   recreate_fbo(VisFbo& f, int w, int h);
+void   destroy_fbo(VisFbo& f);
 void   run_fft();

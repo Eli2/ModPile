@@ -53,27 +53,32 @@ GLuint link_program(const char* vert_src, const char* frag_src) {
 	return prog;
 }
 
-void recreate_fbo(int w, int h) {
-	if (g_vis.fbo) {
-		glDeleteTextures(1, &g_vis.fbo_tex);
-		glDeleteRenderbuffers(1, &g_vis.fbo_rbo);
-		glDeleteFramebuffers(1, &g_vis.fbo);
-		g_vis.fbo = g_vis.fbo_tex = g_vis.fbo_rbo = 0;
+void destroy_fbo(VisFbo& f) {
+	if (f.fbo) {
+		glDeleteTextures(1, &f.fbo_tex);
+		glDeleteRenderbuffers(1, &f.fbo_rbo);
+		glDeleteFramebuffers(1, &f.fbo);
+		f = {};
 	}
-	glGenFramebuffers(1, &g_vis.fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, g_vis.fbo);
+}
 
-	glGenTextures(1, &g_vis.fbo_tex);
-	glBindTexture(GL_TEXTURE_2D, g_vis.fbo_tex);
+void recreate_fbo(VisFbo& f, int w, int h) {
+	destroy_fbo(f);
+
+	glGenFramebuffers(1, &f.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+
+	glGenTextures(1, &f.fbo_tex);
+	glBindTexture(GL_TEXTURE_2D, f.fbo_tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_vis.fbo_tex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, f.fbo_tex, 0);
 
-	glGenRenderbuffers(1, &g_vis.fbo_rbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, g_vis.fbo_rbo);
+	glGenRenderbuffers(1, &f.fbo_rbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, f.fbo_rbo);
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, g_vis.fbo_rbo);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, f.fbo_rbo);
 
 	GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 	if (fbStatus != GL_FRAMEBUFFER_COMPLETE)
@@ -83,8 +88,8 @@ void recreate_fbo(int w, int h) {
 	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	g_vis.fbo_w = w;
-	g_vis.fbo_h = h;
+	f.w = w;
+	f.h = h;
 }
 
 // ─── FFT + history ───────────────────────────────────────────────────────────

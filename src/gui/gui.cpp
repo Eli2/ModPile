@@ -106,7 +106,9 @@ void gui_iterate(AppState &app) {
 				ImGui::DockBuilderDockWindow("Pile", rootRight);
 				ImGui::DockBuilderDockWindow("Playlist", rootRight);
 				ImGui::DockBuilderDockWindow("Charts", rootRight);
-				ImGui::DockBuilderDockWindow("Visualizer", rootRight);
+				ImGui::DockBuilderDockWindow("Bars", rootRight);
+				ImGui::DockBuilderDockWindow("2D Spectrogram", rootRight);
+				ImGui::DockBuilderDockWindow("3D Spectrogram", rootRight);
 			}
 		}
 		ImGui::DockBuilderFinish(dockspace);
