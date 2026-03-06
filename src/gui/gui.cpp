@@ -26,11 +26,9 @@
 #include <string>
 
 static bool g_gui_inited = false;
-static bool g_layout_loaded = false;
-static bool g_dock_built = false;
-static bool g_force_default_layout = false;
+static bool g_apply_default_layout = true;
 
-void gui_reset_layout() { g_force_default_layout = true; }
+void gui_reset_layout() { g_apply_default_layout = true; }
 
 void gui_init(AppState &app) {
 	IMGUI_CHECKVERSION();
@@ -52,7 +50,7 @@ void gui_init(AppState &app) {
 		std::ifstream f(layoutPath, std::ios::binary);
 		std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 		ImGui::LoadIniSettingsFromMemory(data.c_str(), data.size());
-		g_layout_loaded = true;
+		g_apply_default_layout = false;
 	}
 
 	g_gui_inited = true;
@@ -84,9 +82,8 @@ void gui_iterate(AppState &app) {
 
 	auto dockspace = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar);
 
-	if(g_force_default_layout || (!g_dock_built && !g_layout_loaded)) {
-		g_force_default_layout = false;
-		g_dock_built = true;
+	if(g_apply_default_layout) {
+		g_apply_default_layout = false;
 
 		ImGui::DockBuilderRemoveNodeChildNodes(dockspace);
 
