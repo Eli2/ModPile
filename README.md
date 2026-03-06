@@ -89,7 +89,7 @@ ctest --test-dir build
 
 ### Arch Linux / Manjaro / Endeavour / Garuda / Artix
 
-Note: `libebur128` and `kissfft` are not in the official repos; install them from the AUR or let CMake fetch them automatically (see flags below).
+Note: `libebur128` and `kissfft` are not in the official repos. Use the flags below to fetch them automatically, or install them from the AUR.
 
 ```sh
 sudo pacman -S --needed \
@@ -123,7 +123,7 @@ ctest --test-dir build
 
 ### Fedora / RHEL / CentOS / Rocky / Alma
 
-Note: `libebur128`, `kissfft`, `zstd` (no CMake config files in `libzstd-devel`), and `catch2` (Fedora ships v2, project requires v3) are fetched automatically via the flags below.
+Note: `libebur128`, `kissfft`, `zstd`, and `catch2` (v3) are not available in the official repos. Use the flags below to fetch them automatically.
 
 ```sh
 sudo dnf install \
