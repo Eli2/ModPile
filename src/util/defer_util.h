@@ -3,7 +3,7 @@
 
 template <typename F>
 struct ScopeExit {
-	ScopeExit(F f) : f(f) {}
+	ScopeExit(F fn) : f(fn) {}
 	~ScopeExit() { f(); }
 	F f;
 };

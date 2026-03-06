@@ -125,8 +125,8 @@ static void recurseFilesystem(TaskControl &tc, sqlite3* db, const int depth, con
 		for(auto &entry : fs::directory_iterator(path)) {
 			sorted.insert(entry.path());
 		}
-		for(auto &path : sorted) {
-			recurseFilesystem(tc, db, depth+1, path);
+		for(auto &entry : sorted) {
+			recurseFilesystem(tc, db, depth+1, entry);
 		}
 	} else {
 		readFile(tc, db, depth+1, path);

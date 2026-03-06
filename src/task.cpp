@@ -165,7 +165,7 @@ static LockedString     g_currentTaskName;
 
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 
-static std::string task_name(const Tasks &t) {
+static std::string task_name(const Tasks &task) {
 	return std::visit(overload{
 		[](const Poison &)                        { return std::string(""); },
 		[](const Load &t)                         { return std::format("Load: {}", t.path.filename().string()); },
@@ -178,7 +178,7 @@ static std::string task_name(const Tasks &t) {
 		[](const ImportPlay &t)                   { return std::format("Import play: {}", t.path.filename().string()); },
 		[](const ExportPlay &t)                   { return std::format("Export play: {}", t.path.filename().string()); },
 		[](const ExportPlaylist &t)               { return std::format("Export: {}", t.playlist_name); },
-	}, t);
+	}, task);
 }
 
 void task_init(AppState &app) {

@@ -323,10 +323,13 @@ target_compile_options(ModPile PRIVATE
 	-Wextra
 	-Wpedantic
 	-Wno-unused-parameter
+	#-Wshadow
+	-Wnull-dereference
+	-Wimplicit-fallthrough
+	-Wformat=2
 )
 
 target_compile_features(ModPile PRIVATE
-	#c_std_17
 	cxx_std_20
 )
 
@@ -380,7 +383,6 @@ add_executable(ModPileTest
 	test/test_str_util.cpp
 )
 target_compile_features(ModPileTest PRIVATE
-	#c_std_17
 	cxx_std_20
 )
 target_link_libraries(ModPileTest PRIVATE
