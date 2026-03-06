@@ -30,5 +30,5 @@ echo
 
 echo "$packages" | while read -r pkg; do
     echo ">>> apt-get install -y $pkg"
-    apt-get install -y "$pkg"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"
 done

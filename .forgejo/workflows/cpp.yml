@@ -8,6 +8,8 @@ on:
 jobs:
   build-linux:
     runs-on: codeberg-medium
+    container:
+      image: ubuntu:25.10
     steps:
     - name: checkout
       uses: actions/checkout@v4
@@ -15,11 +17,14 @@ jobs:
         fetch-depth: 1
     - name: prepare
       run: |
-        export DEBIAN_FRONTEND=noninteractive
-        sudo apt update -y --fix-missing
+        apt update -y --fix-missing
+      env:
+        DEBIAN_FRONTEND: noninteractive
     - name: install
       run: |
-        sudo bash .forgejo/workflows/install_debian_deps.sh
+        bash .forgejo/workflows/install_debian_deps.sh
+      env:
+        DEBIAN_FRONTEND: noninteractive
     - name: configure
       run: |
         cmake --version
