@@ -492,6 +492,12 @@ bool player_init(AppState &app) {
 		
 		auto play = [&]()->auto{
 			
+			if(!app.player.request.playId.get().empty()) {
+				app.player.request.play = false;
+				nextWasRequested = true;
+				return State::PlayEnd;
+			}
+
 			if(app.player.request.play) {
 				app.player.request.play = false;
 				// We are already Playing
@@ -760,6 +766,11 @@ bool player_init(AppState &app) {
 		
 		auto pause = [&]()->auto{
 			
+			if(!app.player.request.playId.get().empty()) {
+				app.player.request.play = false;
+				return State::PlayEnd;
+			}
+
 			if(app.player.request.play) {
 				app.player.request.play = false;
 				alSourcePlay(alSource);
