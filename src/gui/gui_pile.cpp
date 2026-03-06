@@ -62,8 +62,15 @@ void gui_pile(AppState &app) {
 		ImGuiTableFlags_Borders |
 		ImGuiTableFlags_SizingFixedFit;
 
-	if(ImGui::BeginTable("Meta", 9, tblFlags)) {
+	if(ImGui::BeginTable("Meta", 10, tblFlags)) {
 		ImGui::TableSetupColumn("play",
+			ImGuiTableColumnFlags_NoSort |
+			ImGuiTableColumnFlags_WidthFixed |
+			ImGuiTableColumnFlags_NoHide |
+			ImGuiTableColumnFlags_NoHeaderLabel,
+			30.f
+		);
+		ImGui::TableSetupColumn("+pl",
 			ImGuiTableColumnFlags_NoSort |
 			ImGuiTableColumnFlags_WidthFixed |
 			ImGuiTableColumnFlags_NoHide |
@@ -98,6 +105,8 @@ void gui_pile(AppState &app) {
 			app.pile.request.executeQuery = true;
 		}
 
+		const auto active_playlist_id = app.playlist.state.current_playlist_id;
+
 		for(auto &r : app.pile.state.response.rows) {
 			ImGui::TableNextRow();
 
@@ -108,6 +117,17 @@ void gui_pile(AppState &app) {
 				app.player.request.play = true;
 				app.player.request.next = true;
 			};
+
+			ImGui::TableNextColumn();
+			ImGui::BeginDisabled(!active_playlist_id.has_value());
+			if(ImGui::Button("+pl")) {
+				AppState::Playlist::Request::AddTrack req;
+				req.playlist_id = *active_playlist_id;
+				req.track_id = r.id;
+				app.playlist.request.addTrack = req;
+			}
+			ImGui::EndDisabled();
+
 			ImGui::PopID();
 
 			ImGui::TableNextColumn(); ImGui::Text("%s", r.file_name.c_str());
