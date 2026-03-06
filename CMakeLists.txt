@@ -91,6 +91,8 @@ endif()
 
 if(MODPILE_USE_SYSTEM_SDL)
 	find_package(SDL3 REQUIRED)
+	find_package(SDL3_image REQUIRED)
+	find_package(SDL3_ttf REQUIRED)
 else()
 	set(SDL_SHARED OFF)
 	set(SDL_STATIC ON)
