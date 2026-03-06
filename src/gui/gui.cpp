@@ -23,7 +23,7 @@
 
 #include <filesystem>
 #include <fstream>
-#include <string>
+#include <sstream>
 
 static bool g_gui_inited = false;
 static bool g_apply_default_layout = true;
@@ -48,7 +48,9 @@ void gui_init(AppState &app) {
 	auto layoutPath = config_get_layout_path();
 	if(std::filesystem::exists(layoutPath)) {
 		std::ifstream f(layoutPath, std::ios::binary);
-		std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+		std::ostringstream ss;
+		ss << f.rdbuf();
+		std::string data = ss.str();
 		ImGui::LoadIniSettingsFromMemory(data.c_str(), data.size());
 		g_apply_default_layout = false;
 	}
