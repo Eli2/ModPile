@@ -8,7 +8,7 @@
 #include <array>
 
 #include "glad/glad.h"
-#include <kiss_fftr.h>
+#include <kissfft/kiss_fftr.h>
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

@@ -37,59 +37,57 @@ normalization, and provides a Dear ImGui GUI with docking support.
 - **USB numpad control** — dedicate a numpad as a physical playback remote
 - **Metadata analysis** — per-track loudness, duration, channel count
 
-## Requirements
+## Building from source
 
 ### Build tools
 
 - CMake 3.28+
 - C++20 compiler (GCC 12+ or Clang 16+)
-- pkg-config
 
-### System libraries (Debian/Ubuntu)
+### CMake options
 
-```
+| Option                          | Default | Description                                                                       |
+|---------------------------------|---------|-----------------------------------------------------------------------------------|
+| `MODPILE_SANITIZE`              | `none`  | Enable a sanitizer: `address`, `thread`, or `undefined`                           |
+| `MODPILE_IPO`                   | `OFF`   | Enable link-time optimization (IPO/LTO)                                           |
+| `MODPILE_USE_SYSTEM_LIBARCHIVE` | `ON`    | Use system libarchive; set `OFF` to fetch and build from source                   |
+| `MODPILE_USE_SYSTEM_LIBXMP`     | `ON`    | Use system libxmp; set `OFF` to fetch and build from source                       |
+| `MODPILE_USE_SYSTEM_ZSTD`       | `ON`    | Use system zstd; set `OFF` to fetch and build from source                         |
+| `MODPILE_USE_SYSTEM_SDL`        | `OFF`   | Use system SDL3/SDL3\_image/SDL3\_ttf; set `ON` if SDL 3.x packages are available |
+| `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
+| `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
+| `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
+
+### Development packages (Debian/Ubuntu)
+
+```sh
 sudo apt install \
+    build-essential \
+    cmake \
+    catch2 \
     libsqlite3-dev \
     libopenal-dev \
-    libcurl4-openssl-dev \
+    libcurl-dev \
     libarchive-dev \
     libxmp-dev \
     libebur128-dev \
     libsystemd-dev \
     libzstd-dev \
-    catch2
+    libkissfft-dev \
+    libglm-dev \
+    libsdl3-dev \
+    libsdl3-image-dev \
+    libsdl3-ttf-dev \
 ```
 
-> `libcurl4-nss-dev` or `libcurl4-gnutls-dev` can be substituted for
-> `libcurl4-openssl-dev` depending on your preference.
-
-SDL3, SDL3\_image, SDL3\_ttf, libarchive, libxmp, zstd, libebur128,
-KissFFT, and GLM are all available as either system libraries or
-FetchContent-built copies, controlled by the `MODPILE_USE_SYSTEM_*` options
-below.
-
-## Building
+### Building
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build
 ```
 
-## CMake options
-
-| Option | Default | Description |
-|---|---|---|
-| `MODPILE_USE_SYSTEM_LIBARCHIVE` | `ON` | Use system libarchive; set `OFF` to fetch and build from source |
-| `MODPILE_USE_SYSTEM_LIBXMP` | `ON` | Use system libxmp; set `OFF` to fetch and build from source |
-| `MODPILE_USE_SYSTEM_ZSTD` | `ON` | Use system zstd; set `OFF` to fetch and build from source |
-| `MODPILE_USE_SYSTEM_SDL` | `OFF` | Use system SDL3/SDL3\_image/SDL3\_ttf; set `ON` if SDL 3.x packages are available |
-| `MODPILE_USE_SYSTEM_EBUR128` | `ON` | Use system libebur128; set `OFF` to fetch and build from source |
-| `MODPILE_USE_SYSTEM_KISSFFT` | `OFF` | Use system kissfft; set `ON` if kissfft is available as a system package |
-| `MODPILE_USE_SYSTEM_GLM` | `ON` | Use system GLM; set `OFF` to fetch from source |
-| `MODPILE_IPO` | `OFF` | Enable link-time optimization (IPO/LTO) |
-| `MODPILE_SANITIZE` | `none` | Enable a sanitizer: `address`, `thread`, or `undefined` |
-
-## Running tests
+### Running tests
 
 ```sh
 ctest --test-dir build

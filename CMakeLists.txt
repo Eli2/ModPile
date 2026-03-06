@@ -20,7 +20,7 @@ option(MODPILE_USE_SYSTEM_LIBXMP     "Use system libxmp"     ON)
 option(MODPILE_USE_SYSTEM_ZSTD       "Use system zstd"       ON)
 option(MODPILE_USE_SYSTEM_SDL        "Use system SDL"        OFF)
 option(MODPILE_USE_SYSTEM_EBUR128    "Use system ebur128"    ON)
-option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    OFF)
+option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    ON)
 option(MODPILE_USE_SYSTEM_GLM        "Use system glm"        ON)
 option(MODPILE_ENABLE_MPRIS          "Enable MPRIS D-Bus support (requires libsystemd)" ON)
 
@@ -166,7 +166,7 @@ else()
 endif()
 
 if(MODPILE_USE_SYSTEM_KISSFFT)
-	find_package(kissfft REQUIRED)
+	find_package(kissfft REQUIRED COMPONENTS SHARED)
 else()
 	FetchContent_Declare(
 		kissfft
@@ -178,7 +178,7 @@ else()
 	set(KISSFFT_DATATYPE float CACHE STRING "")
 	set(KISSFFT_STATIC ON CACHE BOOL "")
 	set(KISSFFT_TEST OFF CACHE BOOL "")
-	set(KISSFFT_TOOLS ON CACHE BOOL "")
+	set(KISSFFT_TOOLS OFF CACHE BOOL "")
 	FetchContent_MakeAvailable(kissfft)
 endif()
 
@@ -302,7 +302,6 @@ target_include_directories(ModPile PRIVATE
 	src/
 	src/gui/
 	src/visualizer/
-	${kissfft_SOURCE_DIR}/tools
 )
 
 target_compile_options(ModPile PRIVATE
@@ -337,7 +336,7 @@ target_link_libraries(ModPile PRIVATE
 	ebur128
 	CURL::libcurl
 	glad::glad
-	kissfft
+	kissfft::kissfft-float
 	glm::glm
 )
 if(MODPILE_USE_SYSTEM_ZSTD)
