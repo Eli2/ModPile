@@ -85,6 +85,7 @@ else()
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/jiixyj/libebur128
 		GIT_TAG        67b33abe1558160ed76ada1322329b0e9e058b02 # v1.2.6
+		PATCH_COMMAND  sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.5)/" CMakeLists.txt
 	)
 	FetchContent_MakeAvailable(libebur128)
 endif()
