@@ -3,5 +3,5 @@
 #pragma once
 
 void bars_init();
-void bars_render();
+void bars_render(int w, int h);
 void bars_quit();

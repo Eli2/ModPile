@@ -111,7 +111,7 @@ void visualizer_iterate(AppState& app) {
 	// 3. One ImGui window per visualizer — all rendered every frame
 
 	ImGui::Begin("Bars");
-	vis_render_to_fbo(g_fbo_bars, DepthTest::Off, [](int, int) { bars_render(); });
+	vis_render_to_fbo(g_fbo_bars, DepthTest::Off, [](int w, int h) { bars_render(w, h); });
 	ImGui::End();
 
 	ImGui::Begin("2D Spectrogram");
