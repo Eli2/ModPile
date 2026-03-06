@@ -58,7 +58,7 @@ void gui_charts(AppState &app) {
 		ImGuiTableFlags_Borders |
 		ImGuiTableFlags_SizingFixedFit;
 
-	if(ImGui::BeginTable("ChartsRows", 11, tblFlags)) {
+	if(ImGui::BeginTable("Charts", 11, tblFlags)) {
 		ImGui::TableSetupColumn("play",
 			ImGuiTableColumnFlags_NoSort |
 			ImGuiTableColumnFlags_WidthFixed |

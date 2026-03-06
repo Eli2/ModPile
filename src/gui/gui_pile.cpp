@@ -62,7 +62,7 @@ void gui_pile(AppState &app) {
 		ImGuiTableFlags_Borders |
 		ImGuiTableFlags_SizingFixedFit;
 
-	if(ImGui::BeginTable("Meta", 10, tblFlags)) {
+	if(ImGui::BeginTable("Pile", 10, tblFlags)) {
 		ImGui::TableSetupColumn("play",
 			ImGuiTableColumnFlags_NoSort |
 			ImGuiTableColumnFlags_WidthFixed |

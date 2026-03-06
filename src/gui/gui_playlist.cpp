@@ -136,7 +136,7 @@ void gui_playlist(AppState &app) {
 		ImGuiTableFlags_Borders |
 		ImGuiTableFlags_SizingFixedFit;
 
-	if(ImGui::BeginTable("Meta", 10, tblFlags)) {
+	if(ImGui::BeginTable("Playlist", 10, tblFlags)) {
 		ImGui::TableSetupColumn("play",
 			ImGuiTableColumnFlags_NoSort |
 			ImGuiTableColumnFlags_WidthFixed |
