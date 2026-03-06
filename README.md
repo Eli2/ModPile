@@ -39,10 +39,7 @@ normalization, and provides a Dear ImGui GUI with docking support.
 
 ## Building from source
 
-### Build tools
-
-- CMake 3.28+
-- C++20 compiler (GCC 12+ or Clang 16+)
+Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 
 ### CMake options
 
@@ -58,7 +55,7 @@ normalization, and provides a Dear ImGui GUI with docking support.
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
 
-### Development packages (Debian/Ubuntu)
+### Debian / Ubuntu / Mint / Pop / Elementary / Zorin / Neon
 
 ```sh
 sudo apt install \
@@ -80,9 +77,18 @@ sudo apt install \
     libsdl3-ttf-dev \
 ```
 
-### Development packages (Arch Linux)
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+```
 
-Note: `libebur128` and `kissfft` are not in the official repos; pass `-DMODPILE_USE_SYSTEM_EBUR128=OFF -DMODPILE_USE_SYSTEM_KISSFFT=OFF` to CMake to fetch them automatically, or install them from the AUR.
+```sh
+cmake --build build
+ctest --test-dir build
+```
+
+### Arch Linux / Manjaro / Endeavour / Garuda / Artix
+
+Note: `libebur128` and `kissfft` are not in the official repos; install them from the AUR or let CMake fetch them automatically (see flags below).
 
 ```sh
 sudo pacman -S --needed \
@@ -102,16 +108,49 @@ sudo pacman -S --needed \
     sdl3_ttf \
 ```
 
-### Building
-
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build
+cmake -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DMODPILE_USE_SYSTEM_EBUR128=OFF \
+    -DMODPILE_USE_SYSTEM_KISSFFT=OFF
 ```
 
-### Running tests
+```sh
+cmake --build build
+ctest --test-dir build
+```
+
+### Fedora / RHEL / CentOS / Rocky / Alma
+
+Note: `libebur128` and `kissfft` are not in the official repos; CMake will fetch them automatically via the flags below.
 
 ```sh
+sudo dnf install \
+    gcc-c++ \
+    cmake \
+    catch2-devel \
+    sqlite-devel \
+    openal-soft-devel \
+    libcurl-devel \
+    libarchive-devel \
+    libxmp-devel \
+    systemd-devel \
+    zstd-devel \
+    glm-devel \
+    SDL3-devel \
+    SDL3_image-devel \
+    SDL3_ttf-devel \
+```
+
+```sh
+cmake -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DMODPILE_USE_SYSTEM_EBUR128=OFF \
+    -DMODPILE_USE_SYSTEM_KISSFFT=OFF
+```
+
+```sh
+cmake --build build
 ctest --test-dir build
 ```
 

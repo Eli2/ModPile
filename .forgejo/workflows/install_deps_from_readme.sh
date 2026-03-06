@@ -51,6 +51,10 @@ case "$pm_binary" in
         # shellcheck disable=SC2086
         pacman -S --noconfirm --needed $packages
         ;;
+    dnf)
+        # shellcheck disable=SC2086
+        dnf install -y $packages
+        ;;
     *)
         echo "ERROR: Don't know how to invoke '$pm_binary' non-interactively" >&2
         exit 1

@@ -27,7 +27,7 @@ jobs:
     - name: configure
       run: |
         cmake --version
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        bash .forgejo/workflows/configure_from_readme.sh ubuntu
     - name: build
       run: |
         cmake --build build -j4
@@ -35,7 +35,7 @@ jobs:
       run: |
         ctest --test-dir build
 
-  build-archlinux:
+  build-arch:
     runs-on: codeberg-medium
     container:
       image: archlinux:latest
@@ -54,9 +54,33 @@ jobs:
     - name: configure
       run: |
         cmake --version
-        cmake -B build -DCMAKE_BUILD_TYPE=Release \
-          -DMODPILE_USE_SYSTEM_EBUR128=OFF \
-          -DMODPILE_USE_SYSTEM_KISSFFT=OFF
+        bash .forgejo/workflows/configure_from_readme.sh arch
+    - name: build
+      run: |
+        cmake --build build -j4
+    - name: test
+      run: |
+        ctest --test-dir build
+
+  build-fedora:
+    runs-on: codeberg-medium
+    container:
+      image: fedora:latest
+    steps:
+    - name: prepare
+      run: |
+        dnf install -y git nodejs
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    - name: install
+      run: |
+        bash .forgejo/workflows/install_deps_from_readme.sh
+    - name: configure
+      run: |
+        cmake --version
+        bash .forgejo/workflows/configure_from_readme.sh fedora
     - name: build
       run: |
         cmake --build build -j4
