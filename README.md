@@ -122,7 +122,7 @@ ctest --test-dir build
 
 ### Fedora / RHEL / CentOS / Rocky / Alma
 
-Note: `libebur128` and `kissfft` are not in the official repos; CMake will fetch them automatically via the flags below.
+Note: `libebur128`, `kissfft`, and `zstd` (no CMake config files in `libzstd-devel`) are fetched automatically via the flags below.
 
 ```sh
 sudo dnf install \
@@ -135,7 +135,6 @@ sudo dnf install \
     libarchive-devel \
     libxmp-devel \
     systemd-devel \
-    libzstd-devel \
     glm-devel \
     SDL3-devel \
     SDL3_image-devel \
@@ -146,7 +145,8 @@ sudo dnf install \
 cmake -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DMODPILE_USE_SYSTEM_EBUR128=OFF \
-    -DMODPILE_USE_SYSTEM_KISSFFT=OFF
+    -DMODPILE_USE_SYSTEM_KISSFFT=OFF \
+    -DMODPILE_USE_SYSTEM_ZSTD=OFF
 ```
 
 ```sh
