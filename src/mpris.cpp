@@ -369,7 +369,7 @@ static int SetPosition(
 		return r;
 	
 	// If mismatch we got an old request
-	if(std::string(path) == currPath) {
+	if(path && std::string_view(path) == currPath) {
 		app.player.request.position.store(val / 1000);
 	}
 	
@@ -476,8 +476,10 @@ static int set_LoopStatus(
 	r = sd_bus_message_read_basic(value, SD_BUS_TYPE_STRING, &t);
 	if(r < 0)
 		return r;
-	
-	std::string s = (t);
+	if(!t)
+		return -EINVAL;
+
+	std::string_view s = t;
 	if(s == "None") {
 		app.player.state.loop_status = LoopState::None;
 	} else if(s == "Track") {
@@ -759,10 +761,13 @@ static const auto path = "/org/mpris/MediaPlayer2";
 
 void mpris_seeked(AppState &app)
 {
+	if(!g_dbus)
+		return;
+
 	int64_t pos = app.player.track.elapsed;
 	pos *= 1000;
-	
-	sd_bus_emit_signal(
+
+	int r = sd_bus_emit_signal(
 		g_dbus,
 		path,
 		MediaPlayer2::Player::interface,
@@ -770,6 +775,8 @@ void mpris_seeked(AppState &app)
 		"x",
 		pos
 	);
+	if(r < 0)
+		log_error("MPRIS Seeked signal error {}", strerror(-r));
 }
 
 void mpris_init(AppState &app)
@@ -884,13 +891,15 @@ void mpris_iterate(AppState &app)
 	
 	if(!changed.empty()) {
 		changed.push_back(nullptr);
-		
-		sd_bus_emit_properties_changed_strv(
+
+		int r = sd_bus_emit_properties_changed_strv(
 			g_dbus,
 			path,
 			MediaPlayer2::Player::interface,
 			const_cast<char **>(changed.data())
 		);
+		if(r < 0)
+			log_error("MPRIS PropertiesChanged error {}", strerror(-r));
 	}
 }
 
