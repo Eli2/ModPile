@@ -80,6 +80,28 @@ sudo apt install \
     libsdl3-ttf-dev \
 ```
 
+### Development packages (Arch Linux)
+
+Note: `libebur128` and `kissfft` are not in the official repos; pass `-DMODPILE_USE_SYSTEM_EBUR128=OFF -DMODPILE_USE_SYSTEM_KISSFFT=OFF` to CMake to fetch them automatically, or install them from the AUR.
+
+```sh
+sudo pacman -S --needed \
+    base-devel \
+    cmake \
+    catch2 \
+    sqlite \
+    openal \
+    curl \
+    libarchive \
+    libxmp \
+    systemd \
+    zstd \
+    glm \
+    sdl3 \
+    sdl3_image \
+    sdl3_ttf \
+```
+
 ### Building
 
 ```sh
