@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #include "task.h"
 
+#include <variant>
 #include <vector>
 
 #include "blocking_queue.h"
@@ -12,9 +13,7 @@
 #include "task/load.h"
 #include "task/modland.h"
 #include "task_util.h"
-#include "util/hash_util.h"
 #include "util/sqlite_util.h"
-#include "util/str_util.h"
 #include "util/thread_util.h"
 #include "util/timer_util.h"
 #include "db.h"
