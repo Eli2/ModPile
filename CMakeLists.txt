@@ -90,6 +90,7 @@ else()
 
 	set(ENABLE_TESTS OFF)
 	FetchContent_MakeAvailable(libebur128)
+	target_include_directories(ebur128 PUBLIC ${libebur128_SOURCE_DIR}/ebur128)
 endif()
 
 if(MODPILE_USE_SYSTEM_SDL)
