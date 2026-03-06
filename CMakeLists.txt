@@ -85,8 +85,10 @@ else()
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/jiixyj/libebur128
 		GIT_TAG        67b33abe1558160ed76ada1322329b0e9e058b02 # v1.2.6
-		PATCH_COMMAND  sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.5)/" CMakeLists.txt
+		PATCH_COMMAND  find <SOURCE_DIR> -name "CMakeLists.txt" -exec sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.5)/" {} +
 	)
+
+	set(ENABLE_TESTS OFF)
 	FetchContent_MakeAvailable(libebur128)
 endif()
 
@@ -95,10 +97,6 @@ if(MODPILE_USE_SYSTEM_SDL)
 	find_package(SDL3_image REQUIRED)
 	find_package(SDL3_ttf REQUIRED)
 else()
-	set(SDL_SHARED OFF)
-	set(SDL_STATIC ON)
-	set(SDL_TEST_LIBRARY OFF)
-	set(SDL_AUDIO OFF)
 	FetchContent_Declare(
 		SDL3
 		GIT_SHALLOW    ON
@@ -117,6 +115,11 @@ else()
 		GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf
 		GIT_TAG        a1ce3670aec736ecbf0936c43f2f0cc53aa61e5b # 3.2.2
 	)
+
+	set(SDL_SHARED OFF)
+	set(SDL_STATIC ON)
+	set(SDL_TEST_LIBRARY OFF)
+	set(SDL_AUDIO OFF)
 	FetchContent_MakeAvailable(SDL3 SDL3_image SDL3_ttf)
 endif()
 
@@ -143,13 +146,18 @@ endif()
 if(MODPILE_USE_SYSTEM_LIBARCHIVE)
 	find_package(LibArchive REQUIRED)
 else()
-	set(ENABLE_TEST OFF)
 	FetchContent_Declare(
 		libarchive
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libarchive/libarchive
 		GIT_TAG        dd897a78c662a2c7a003e7ec158cea7909557bee # 3.8.5
 	)
+
+	set(ENABLE_TEST OFF)
+	set(ENABLE_CAT OFF)
+	set(ENABLE_CPIO OFF)
+	set(ENABLE_TAR OFF)
+	set(ENABLE_UNZIP OFF)
 	FetchContent_MakeAvailable(libarchive)
 	add_library(LibArchive::LibArchive ALIAS archive_static)
 endif()
@@ -157,14 +165,15 @@ endif()
 if(MODPILE_USE_SYSTEM_LIBXMP)
 	find_package(libxmp REQUIRED)
 else()
-	set(BUILD_SHARED OFF)
-	set(LIBXMP_DISABLE_DEPACKERS ON)
 	FetchContent_Declare(
 		libxmp
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libxmp/libxmp
 		GIT_TAG        8a4fdf7d09aedc921de537853b59e1d15b534f24 # 4.7.0
 	)
+	
+	set(BUILD_SHARED OFF)
+	set(LIBXMP_DISABLE_DEPACKERS ON)
 	FetchContent_MakeAvailable(libxmp)
 endif()
 
@@ -178,10 +187,10 @@ else()
 		GIT_TAG        7bce4153c6bc8aba2db0e889e576f9d00505cbe1 # 131.2.0
 	)
 	
-	set(KISSFFT_DATATYPE float CACHE STRING "")
-	set(KISSFFT_STATIC ON CACHE BOOL "")
-	set(KISSFFT_TEST OFF CACHE BOOL "")
-	set(KISSFFT_TOOLS OFF CACHE BOOL "")
+	set(KISSFFT_DATATYPE float)
+	set(KISSFFT_STATIC ON)
+	set(KISSFFT_TEST OFF)
+	set(KISSFFT_TOOLS OFF)
 	FetchContent_MakeAvailable(kissfft)
 endif()
 
