@@ -67,7 +67,7 @@ sudo apt install \
     catch2 \
     libsqlite3-dev \
     libopenal-dev \
-    libcurl-dev \
+    libcurl4-openssl-dev \
     libarchive-dev \
     libxmp-dev \
     libebur128-dev \
