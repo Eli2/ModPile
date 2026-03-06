@@ -30,7 +30,7 @@ jobs:
         cmake -B build -DCMAKE_BUILD_TYPE=Release
     - name: build
       run: |
-        cmake --build build
+        cmake --build build -j4
     - name: test
       run: |
         ctest --test-dir build
@@ -59,7 +59,7 @@ jobs:
           -DMODPILE_USE_SYSTEM_KISSFFT=OFF
     - name: build
       run: |
-        cmake --build build
+        cmake --build build -j4
     - name: test
       run: |
         ctest --test-dir build
