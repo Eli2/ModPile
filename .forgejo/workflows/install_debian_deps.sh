@@ -28,7 +28,5 @@ echo "$packages" | while read -r pkg; do
 done
 echo
 
-echo "$packages" | while read -r pkg; do
-    echo ">>> apt-get install -y $pkg"
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"
-done
+# shellcheck disable=SC2086
+DEBIAN_FRONTEND=noninteractive apt-get install -y $packages
