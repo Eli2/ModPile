@@ -11,15 +11,16 @@ jobs:
     container:
       image: ubuntu:25.10
     steps:
+    - name: prepare
+      run: |
+        apt-get update -y
+        apt-get install -y git nodejs
+      env:
+        DEBIAN_FRONTEND: noninteractive
     - name: checkout
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
-    - name: prepare
-      run: |
-        apt update -y --fix-missing
-      env:
-        DEBIAN_FRONTEND: noninteractive
     - name: install
       run: |
         bash .forgejo/workflows/install_debian_deps.sh
