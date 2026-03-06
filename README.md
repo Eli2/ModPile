@@ -53,7 +53,7 @@ normalization, and provides a Dear ImGui GUI with docking support.
 | `MODPILE_USE_SYSTEM_LIBARCHIVE` | `ON`    | Use system libarchive; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_LIBXMP`     | `ON`    | Use system libxmp; set `OFF` to fetch and build from source                       |
 | `MODPILE_USE_SYSTEM_ZSTD`       | `ON`    | Use system zstd; set `OFF` to fetch and build from source                         |
-| `MODPILE_USE_SYSTEM_SDL`        | `OFF`   | Use system SDL3/SDL3\_image/SDL3\_ttf; set `ON` if SDL 3.x packages are available |
+| `MODPILE_USE_SYSTEM_SDL`        | `ON`    | Use system SDL3/SDL3\_image/SDL3\_ttf; set `OFF` to fetch and build from source   |
 | `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
