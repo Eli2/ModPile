@@ -75,7 +75,7 @@ sudo apt install \
     libglm-dev \
     libsdl3-dev \
     libsdl3-image-dev \
-    libsdl3-ttf-dev \
+    libsdl3-ttf-dev
 ```
 
 ```sh
@@ -106,7 +106,7 @@ sudo pacman -S --needed \
     glm \
     sdl3 \
     sdl3_image \
-    sdl3_ttf \
+    sdl3_ttf
 ```
 
 ```sh
@@ -138,7 +138,7 @@ sudo dnf install \
     glm-devel \
     SDL3-devel \
     SDL3_image-devel \
-    SDL3_ttf-devel \
+    SDL3_ttf-devel
 ```
 
 ```sh
