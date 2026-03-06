@@ -135,7 +135,7 @@ sudo dnf install \
     libarchive-devel \
     libxmp-devel \
     systemd-devel \
-    zstd-devel \
+    libzstd-devel \
     glm-devel \
     SDL3-devel \
     SDL3_image-devel \

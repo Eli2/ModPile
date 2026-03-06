@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-README="$SCRIPT_DIR/../../README.md"
+README="$SCRIPT_DIR/../README.md"
 
 # Parse README: for each ```sh block containing "sudo <cmd> ...",
 # emit one line: "<cmd> <pkg1> <pkg2> ..."

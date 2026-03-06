@@ -23,11 +23,11 @@ jobs:
         fetch-depth: 1
     - name: install
       run: |
-        bash .forgejo/workflows/install_deps_from_readme.sh
+        bash scripts/install_from_readme.sh
     - name: configure
       run: |
         cmake --version
-        bash .forgejo/workflows/configure_from_readme.sh ubuntu
+        bash scripts/configure_from_readme.sh ubuntu
     - name: build
       run: |
         cmake --build build -j4
@@ -50,11 +50,11 @@ jobs:
         fetch-depth: 1
     - name: install
       run: |
-        bash .forgejo/workflows/install_deps_from_readme.sh
+        bash scripts/install_from_readme.sh
     - name: configure
       run: |
         cmake --version
-        bash .forgejo/workflows/configure_from_readme.sh arch
+        bash scripts/configure_from_readme.sh arch
     - name: build
       run: |
         cmake --build build -j4
@@ -76,11 +76,11 @@ jobs:
         fetch-depth: 1
     - name: install
       run: |
-        bash .forgejo/workflows/install_deps_from_readme.sh
+        bash scripts/install_from_readme.sh
     - name: configure
       run: |
         cmake --version
-        bash .forgejo/workflows/configure_from_readme.sh fedora
+        bash scripts/configure_from_readme.sh fedora
     - name: build
       run: |
         cmake --build build -j4

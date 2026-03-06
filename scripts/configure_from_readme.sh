@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-README="$SCRIPT_DIR/../../README.md"
+README="$SCRIPT_DIR/../README.md"
 
 # The section to search for can be passed as an argument (e.g. "arch", "fedora",
 # "debian"). The string is matched case-insensitively against ### headings in the
