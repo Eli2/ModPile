@@ -45,6 +45,7 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 
 | Option                          | Default | Description                                                                       |
 |---------------------------------|---------|-----------------------------------------------------------------------------------|
+| `MODPILE_ENABLE_MPRIS`          | `ON`    | Enable MPRIS2 D-Bus support (requires libsystemd); set `OFF` to build without it  |
 | `MODPILE_SANITIZE`              | `none`  | Enable a sanitizer: `address`, `thread`, or `undefined`                           |
 | `MODPILE_IPO`                   | `OFF`   | Enable link-time optimization (IPO/LTO)                                           |
 | `MODPILE_USE_SYSTEM_LIBARCHIVE` | `ON`    | Use system libarchive; set `OFF` to fetch and build from source                   |
