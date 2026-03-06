@@ -338,6 +338,10 @@ if(MODPILE_ENABLE_MPRIS)
 	target_compile_definitions(ModPile PRIVATE HAVE_MPRIS)
 endif()
 
+if(MODPILE_USE_SYSTEM_KISSFFT)
+	target_compile_definitions(ModPile PRIVATE KISSFFT_SYSTEM_HEADERS)
+endif()
+
 set_target_properties(ModPile PROPERTIES
 	LINK_FLAGS_RELEASE -s
 )

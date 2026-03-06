@@ -8,7 +8,12 @@
 #include <array>
 
 #include "glad/glad.h"
-#include <kissfft/kiss_fftr.h>
+// System kissfft installs headers to include/kissfft/; FetchContent exposes the repo root.
+#ifdef KISSFFT_SYSTEM_HEADERS
+#  include <kissfft/kiss_fftr.h>
+#else
+#  include <kiss_fftr.h>
+#endif
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
