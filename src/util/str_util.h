@@ -28,7 +28,7 @@ std::string_view load_string(const std::array<char, N> &data) {
 
 bool is_empty_or_whitespace(const std::string_view &str);
 
-std::string toUtf8(std::wstring in);
+std::string toUtf8(const std::wstring& in);
 
 void trim(std::string &s);
 

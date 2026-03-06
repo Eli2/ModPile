@@ -4,8 +4,9 @@
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <locale>
+#include <string>
+#include <vector>
 
 
 std::string_view load_string(const char * data, size_t maxLength) {
@@ -18,10 +19,19 @@ bool is_empty_or_whitespace(const std::string_view &str) {
 	});
 }
 
-std::string toUtf8(std::wstring in) {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv1;
-	std::string u8str = conv1.to_bytes(in);
-	return u8str;
+std::string toUtf8(const std::wstring& wide) {
+	const std::locale locale("");
+	const auto& facet = std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>(locale);
+	
+	std::mbstate_t state{};
+	std::string result(wide.size() * 4, '\0');
+	const wchar_t* from_next;
+	char* to_next;
+	
+	facet.out(state, wide.data(), wide.data() + wide.size(), from_next,
+			  result.data(), result.data() + result.size(), to_next);
+	result.resize(to_next - result.data());
+	return result;
 }
 
 // trim from start (in place)
