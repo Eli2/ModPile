@@ -57,7 +57,7 @@ struct AppState {
 			double target_loudness = -14;
 		} player;
 		struct NumBlock {
-			bool           enabled = true;
+			bool           enabled = false;
 			unsigned short vid = 0x1a2c;
 			unsigned short pid = 0x2124;
 		} numblock;
