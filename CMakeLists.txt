@@ -22,6 +22,7 @@ option(MODPILE_USE_SYSTEM_SDL        "Use system SDL"        ON)
 option(MODPILE_USE_SYSTEM_EBUR128    "Use system ebur128"    ON)
 option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    ON)
 option(MODPILE_USE_SYSTEM_GLM        "Use system glm"        ON)
+option(MODPILE_USE_SYSTEM_CATCH2     "Use system Catch2"     ON)
 option(MODPILE_ENABLE_MPRIS          "Enable MPRIS D-Bus support (requires libsystemd)" ON)
 
 message(STATUS "=======================================")
@@ -377,7 +378,17 @@ endif()
 
 # =============================================================================
 
-find_package(Catch2 3 REQUIRED)
+if(MODPILE_USE_SYSTEM_CATCH2)
+	find_package(Catch2 3 REQUIRED)
+else()
+	FetchContent_Declare(
+		Catch2
+		GIT_SHALLOW    ON
+		GIT_REPOSITORY https://github.com/catchorg/Catch2
+		GIT_TAG        29c9844f688acb27c87338c39cd186ebfe41aa19 # v3.13.0
+	)
+	FetchContent_MakeAvailable(Catch2)
+endif()
 
 add_executable(ModPileTest
 	${hash_util_srcs}

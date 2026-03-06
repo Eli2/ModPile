@@ -54,6 +54,7 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 | `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
+| `MODPILE_USE_SYSTEM_CATCH2`     | `ON`    | Use system Catch2 (requires v3); set `OFF` to fetch and build from source         |
 
 ### Debian / Ubuntu / Mint / Pop / Elementary / Zorin / Neon
 
@@ -122,13 +123,12 @@ ctest --test-dir build
 
 ### Fedora / RHEL / CentOS / Rocky / Alma
 
-Note: `libebur128`, `kissfft`, and `zstd` (no CMake config files in `libzstd-devel`) are fetched automatically via the flags below.
+Note: `libebur128`, `kissfft`, `zstd` (no CMake config files in `libzstd-devel`), and `catch2` (Fedora ships v2, project requires v3) are fetched automatically via the flags below.
 
 ```sh
 sudo dnf install \
     gcc-c++ \
     cmake \
-    catch2-devel \
     sqlite-devel \
     openal-soft-devel \
     libcurl-devel \
@@ -146,7 +146,8 @@ cmake -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DMODPILE_USE_SYSTEM_EBUR128=OFF \
     -DMODPILE_USE_SYSTEM_KISSFFT=OFF \
-    -DMODPILE_USE_SYSTEM_ZSTD=OFF
+    -DMODPILE_USE_SYSTEM_ZSTD=OFF \
+    -DMODPILE_USE_SYSTEM_CATCH2=OFF
 ```
 
 ```sh
