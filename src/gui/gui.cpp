@@ -77,6 +77,7 @@ void gui_iterate(AppState &app) {
 
 				ImGui::DockBuilderDockWindow("Task", leftBottom);
 				ImGui::DockBuilderDockWindow("Config", leftBottom);
+				ImGui::DockBuilderDockWindow("Equalizer", leftBottom);
 			}
 			{
 				ImGui::DockBuilderDockWindow("Pile", rootRight);
@@ -95,6 +96,7 @@ void gui_iterate(AppState &app) {
 	gui_charts(app);
 	gui_config(app);
 	gui_indexer(app);
+	gui_equalizer(app);
 	visualizer_iterate(app);
 
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

@@ -6,3 +6,4 @@ struct AppState;
 
 void gui_config(AppState &app);
 void gui_indexer(AppState &app);
+void gui_equalizer(AppState &app);
