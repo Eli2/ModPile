@@ -85,7 +85,7 @@ else()
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/jiixyj/libebur128
 		GIT_TAG        67b33abe1558160ed76ada1322329b0e9e058b02 # v1.2.6
-		PATCH_COMMAND  find <SOURCE_DIR> -name "CMakeLists.txt" -exec sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.5)/" {} +
+		PATCH_COMMAND  find <SOURCE_DIR> -name "CMakeLists.txt" -exec sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.13)/" {} +
 	)
 
 	set(ENABLE_TESTS OFF)
@@ -187,10 +187,12 @@ else()
 		GIT_TAG        7bce4153c6bc8aba2db0e889e576f9d00505cbe1 # 131.2.0
 	)
 	
-	set(KISSFFT_DATATYPE float)
-	set(KISSFFT_STATIC ON)
-	set(KISSFFT_TEST OFF)
-	set(KISSFFT_TOOLS OFF)
+	# kissfft's old cmake_minimum_required keeps CMP0077 at OLD, so option()
+	# ignores normal variables; cache entries with FORCE are required here.
+	set(KISSFFT_DATATYPE float CACHE STRING "" FORCE)
+	set(KISSFFT_STATIC ON CACHE BOOL "" FORCE)
+	set(KISSFFT_TEST OFF CACHE BOOL "" FORCE)
+	set(KISSFFT_TOOLS OFF CACHE BOOL "" FORCE)
 	FetchContent_MakeAvailable(kissfft)
 endif()
 
