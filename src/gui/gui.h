@@ -7,3 +7,4 @@ struct AppState;
 void gui_init(AppState &app);
 void gui_iterate(AppState &app);
 void gui_quit(AppState &app);
+void gui_reset_layout();

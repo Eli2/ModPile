@@ -8,6 +8,7 @@
 #include "imgui.h"
 
 #include "global.h"
+#include "gui.h"
 #include "log.h"
 #include "task.h"
 
@@ -152,6 +153,12 @@ void gui_menu(AppState &app) {
 					false);
 			}
 			ImGui::EndDisabled();
+			ImGui::EndMenu();
+		}
+		if(ImGui::BeginMenu("View")) {
+			if(ImGui::MenuItem("Reset Layout")) {
+				gui_reset_layout();
+			}
 			ImGui::EndMenu();
 		}
 		ImGui::EndMainMenuBar();
