@@ -39,9 +39,9 @@ void main() {
 	int px = int(gl_FragCoord.x) - x_offset;
 	if (px < 0) discard;
 
-	int bar_idx_raw = px / slot_w;
-	int bar_idx     = clamp(bar_idx_raw, 0, num_bars - 1);
-	int local       = px - bar_idx * slot_w;
+	int bar_idx = px / slot_w;
+	if (bar_idx >= num_bars) discard;
+	int local   = px - bar_idx * slot_w;
 
 	// Combine the data bars that map to this display bar (max of group).
 	int lo = bar_idx * NUM_BARS / num_bars;
@@ -54,13 +54,10 @@ void main() {
 	if (y > height) discard;
 
 	// Gap overlay — integer grid, no moiré.
-	// Skipped for clamped right-edge pixels so the last bar fills to the edge.
-	if (bar_idx_raw < num_bars) {
-		int gap = (slot_w >= 3) ? max(slot_w / 8, 1) : 0;
-		if (local < gap || local >= slot_w - gap) {
-			FragColor = vec4(0.04, 0.04, 0.10, 1.0);
-			return;
-		}
+	int gap = (slot_w >= 3) ? max(slot_w / 8, 1) : 0;
+	if (local < gap || local >= slot_w - gap) {
+		FragColor = vec4(0.04, 0.04, 0.10, 1.0);
+		return;
 	}
 
 	FragColor = vec4(mix(vec3(0.0, 0.15, 0.6), vec3(0.0, 0.9, 1.0), y), 1.0);
