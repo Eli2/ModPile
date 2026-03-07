@@ -268,6 +268,6 @@ struct AppState {
 	} charts;
 	struct Visualizer {
 		// Written by player thread, read by main thread (SPSC safe)
-		SPSCRingBuffer<int16_t, 65536> sample_queue;
+		SPSCRingBuffer<float, 65536> sample_queue;
 	} visualizer;
 };

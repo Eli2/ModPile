@@ -85,14 +85,14 @@ void visualizer_init(AppState& /*app*/) {
 
 void visualizer_iterate(AppState& app) {
 	// 1. Drain ring buffer → mono float accumulation
-	static std::array<int16_t, FFT_SIZE * 2> batch;
+	static std::array<float, FFT_SIZE * 2> batch;
 	size_t got      = app.visualizer.sample_queue.pop(batch.data(), batch.size());
 	int    new_mono = static_cast<int>(got / 2);
 
 	if (new_mono > 0) {
 		static std::array<float, FFT_SIZE> mono_new;
 		for (int i = 0; i < new_mono; ++i)
-			mono_new[i] = (batch[i * 2] + batch[i * 2 + 1]) * (0.5f / 32768.0f);
+			mono_new[i] = (batch[i * 2] + batch[i * 2 + 1]) * 0.5f;
 
 		int keep  = std::min(g_vis.mono_count, FFT_SIZE - new_mono);
 		int shift = g_vis.mono_count - keep;

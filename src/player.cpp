@@ -88,7 +88,7 @@ bool player_init(AppState &app) {
 
 		ALuint al_fmt = AL_FORMAT_STEREO16;
 		int    xmp_fmt = 0;
-		std::vector<int16_t> vis_conv_buf; // used when converting 32-bit frames for visualizer
+		std::vector<float> vis_conv_buf; // float conversion buffer for visualizer
 
 		bool                 logAlVersion = true;
 		ALCdevice            *alDevice = nullptr;
@@ -661,21 +661,26 @@ bool player_init(AppState &app) {
 			}
 
 			{
+				const size_t n = fi.buffer_size /
+#ifdef XMP_FORMAT_32BIT
+					((xmp_fmt & XMP_FORMAT_32BIT) ? sizeof(int32_t) : sizeof(int16_t));
+#else
+					sizeof(int16_t);
+#endif
+				vis_conv_buf.resize(n);
 #ifdef XMP_FORMAT_32BIT
 				if(xmp_fmt & XMP_FORMAT_32BIT) {
 					const auto* src = static_cast<const int32_t*>(fi.buffer);
-					const size_t n = fi.buffer_size / sizeof(int32_t);
-					vis_conv_buf.resize(n);
 					for(size_t i = 0; i < n; ++i)
-						vis_conv_buf[i] = static_cast<int16_t>(src[i] >> 16);
-					app.visualizer.sample_queue.push(vis_conv_buf.data(), n);
+						vis_conv_buf[i] = src[i] * (1.0f / 2147483648.0f);
 				} else
 #endif
 				{
-					app.visualizer.sample_queue.push(
-						static_cast<const int16_t*>(fi.buffer),
-						fi.buffer_size / sizeof(int16_t));
+					const auto* src = static_cast<const int16_t*>(fi.buffer);
+					for(size_t i = 0; i < n; ++i)
+						vis_conv_buf[i] = src[i] * (1.0f / 32768.0f);
 				}
+				app.visualizer.sample_queue.push(vis_conv_buf.data(), n);
 			}
 
 			if(prebuffering) {
