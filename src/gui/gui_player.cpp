@@ -146,6 +146,17 @@ void gui_player(AppState &app) {
 	}
 	ImGui::Separator();
 	{
+		float tl = static_cast<float>(app.config.player.target_loudness);
+		if(ImGui::SliderFloat("Target Loudness", &tl, -36.0f, -6.0f, "%.1f LUFS")) {
+			app.config.player.target_loudness = tl;
+		}
+		ImGui::SameLine();
+		if(ImGui::Button("R##tl")) {
+			app.config.player.target_loudness = -14.0;
+		}
+	}
+	ImGui::Separator();
+	{
 		float sw = app.player.state.stereo_width.load();
 		if(ImGui::SliderFloat("Stereo width", &sw, 0.0f, 1.0f)) {
 			app.player.state.stereo_width.store(sw);
