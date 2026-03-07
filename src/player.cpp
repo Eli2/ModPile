@@ -731,10 +731,9 @@ bool player_init(AppState &app) {
 			alGetSourcei(alSource, AL_SOURCE_STATE, &sourceState);
 			if(sourceState == AL_PAUSED) {
 				alSourceStop(alSource);
-			} else if(sourceState != AL_PLAYING) {
-				log_error("Source should still be playing here");
-				alSourcePlay(alSource);
 			}
+			// AL_STOPPED: source ran out of buffers naturally -- drain loop exits immediately.
+			// AL_PLAYING: still consuming buffers -- drain loop will wait for them.
 			
 			// Drain buffers
 			auto drainDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
