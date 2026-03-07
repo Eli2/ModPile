@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "log.h"
 #include "task.h"
+#include "visualizer.h"
 
 static void add_directory_dialog(AppState &app) {
 	SDL_ShowOpenFolderDialog([](void *userdata, const char * const *filelist, int filter) {
@@ -153,6 +154,12 @@ void gui_menu(AppState &app) {
 					false);
 			}
 			ImGui::EndDisabled();
+			ImGui::EndMenu();
+		}
+		if(ImGui::BeginMenu("Visualizer")) {
+			ImGui::MenuItem("Bars",           nullptr, &g_vis_show_bars);
+			ImGui::MenuItem("2D Spectrogram", nullptr, &g_vis_show_2d);
+			ImGui::MenuItem("3D Spectrogram", nullptr, &g_vis_show_3d);
 			ImGui::EndMenu();
 		}
 		if(ImGui::BeginMenu("View")) {

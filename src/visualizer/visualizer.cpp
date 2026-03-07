@@ -110,17 +110,23 @@ void visualizer_iterate(AppState& app) {
 
 	// 3. One ImGui window per visualizer — all rendered every frame
 
-	ImGui::Begin("Bars");
-	vis_render_to_fbo(g_fbo_bars, DepthTest::Off, [](int w, int h) { bars_render(w, h); });
-	ImGui::End();
+	if(g_vis_show_bars) {
+		ImGui::Begin("Bars", &g_vis_show_bars);
+		vis_render_to_fbo(g_fbo_bars, DepthTest::Off, [](int w, int h) { bars_render(w, h); });
+		ImGui::End();
+	}
 
-	ImGui::Begin("2D Spectrogram");
-	vis_render_to_fbo(g_fbo_2d, DepthTest::Off, [](int, int) { spectrogram2d_render(); });
-	ImGui::End();
+	if(g_vis_show_2d) {
+		ImGui::Begin("2D Spectrogram", &g_vis_show_2d);
+		vis_render_to_fbo(g_fbo_2d, DepthTest::Off, [](int, int) { spectrogram2d_render(); });
+		ImGui::End();
+	}
 
-	ImGui::Begin("3D Spectrogram");
-	vis_render_to_fbo(g_fbo_3d, DepthTest::On, [](int w, int h) { spectrogram3d_render(w, h); });
-	ImGui::End();
+	if(g_vis_show_3d) {
+		ImGui::Begin("3D Spectrogram", &g_vis_show_3d);
+		vis_render_to_fbo(g_fbo_3d, DepthTest::On, [](int w, int h) { spectrogram3d_render(w, h); });
+		ImGui::End();
+	}
 }
 
 void visualizer_quit(AppState& /*app*/) {
