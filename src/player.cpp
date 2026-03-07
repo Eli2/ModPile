@@ -71,22 +71,25 @@ const char* state_str(State s) {
 bool player_init(AppState &app) {
 	
 	const ALuint freq = 48000;
-	const ALuint fmt = AL_FORMAT_STEREO16;
-	
 
-	
+
+
 	g_playThread = std::thread([&]()->void{
 		std::mt19937 rng(std::random_device{}());
 
 		SQLITE_CLOSE sqlite3* db = db_open(app);
-		
+
 		xmp_context ctx = xmp_create_context();
 		SCOPE_EXIT(
 			xmp_free_context(ctx);
 		);
-		
+
 		std::string lastPlayed = "";
-		
+
+		ALuint al_fmt = AL_FORMAT_STEREO16;
+		int    xmp_fmt = 0;
+		std::vector<int16_t> vis_conv_buf; // used when converting 32-bit frames for visualizer
+
 		bool                 logAlVersion = true;
 		ALCdevice            *alDevice = nullptr;
 		ALCcontext           *alContext = nullptr;
@@ -193,6 +196,24 @@ bool player_init(AppState &app) {
 			} else {
 				log_info("ALC_EXT_EFX not available, equalizer disabled");
 			}
+
+#ifdef XMP_FORMAT_32BIT
+			{
+				ALenum fmt32 = alGetEnumValue("AL_FORMAT_STEREO_I32");
+				if(fmt32 != 0 && fmt32 != AL_INVALID_VALUE) {
+					al_fmt  = static_cast<ALuint>(fmt32);
+					xmp_fmt = XMP_FORMAT_32BIT;
+					log_info("Using 32-bit audio (XMP_FORMAT_32BIT + AL_FORMAT_STEREO_I32)");
+				} else {
+					al_fmt  = AL_FORMAT_STEREO16;
+					xmp_fmt = 0;
+					log_info("AL_FORMAT_STEREO_I32 not available, falling back to 16-bit");
+				}
+			}
+#else
+			al_fmt  = AL_FORMAT_STEREO16;
+			xmp_fmt = 0;
+#endif
 
 			return State::PlayStart;
 		};
@@ -439,7 +460,7 @@ bool player_init(AppState &app) {
 				return State::Stopped;
 			}
 
-			r = xmp_start_player(ctx, freq, 0);
+			r = xmp_start_player(ctx, freq, xmp_fmt);
 			if (r < 0) {
 				log_error("Failed to start player: {}", xmpu_errstr(r));
 				return State::Stopped;
@@ -639,12 +660,26 @@ bool player_init(AppState &app) {
 				log_debug("Completely played");
 			}
 
-			app.visualizer.sample_queue.push(
-				static_cast<const int16_t*>(fi.buffer),
-				fi.buffer_size / sizeof(int16_t));
+			{
+#ifdef XMP_FORMAT_32BIT
+				if(xmp_fmt & XMP_FORMAT_32BIT) {
+					const auto* src = static_cast<const int32_t*>(fi.buffer);
+					const size_t n = fi.buffer_size / sizeof(int32_t);
+					vis_conv_buf.resize(n);
+					for(size_t i = 0; i < n; ++i)
+						vis_conv_buf[i] = static_cast<int16_t>(src[i] >> 16);
+					app.visualizer.sample_queue.push(vis_conv_buf.data(), n);
+				} else
+#endif
+				{
+					app.visualizer.sample_queue.push(
+						static_cast<const int16_t*>(fi.buffer),
+						fi.buffer_size / sizeof(int16_t));
+				}
+			}
 
 			if(prebuffering) {
-				alBufferData(alBuffers[prebufferCount], fmt, fi.buffer, fi.buffer_size, freq);
+				alBufferData(alBuffers[prebufferCount], al_fmt, fi.buffer, fi.buffer_size, freq);
 				alSourceQueueBuffers(alSource, 1, &alBuffers[prebufferCount]);
 				AL_CHECK;
 				prebufferCount++;
@@ -676,7 +711,7 @@ bool player_init(AppState &app) {
 				if(val > 0) {
 					ALuint buffer;
 					alSourceUnqueueBuffers(alSource, 1, &buffer);
-					alBufferData(buffer, fmt, fi.buffer, fi.buffer_size, freq);
+					alBufferData(buffer, al_fmt, fi.buffer, fi.buffer_size, freq);
 					alSourceQueueBuffers(alSource, 1, &buffer);
 					AL_CHECK;
 				}

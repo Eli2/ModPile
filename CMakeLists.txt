@@ -22,6 +22,7 @@ option(MODPILE_USE_SYSTEM_SDL        "Use system SDL"        ON)
 option(MODPILE_USE_SYSTEM_EBUR128    "Use system ebur128"    ON)
 option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    ON)
 option(MODPILE_USE_SYSTEM_GLM        "Use system glm"        ON)
+option(MODPILE_USE_SYSTEM_OPENAL     "Use system OpenAL"     ON)
 option(MODPILE_USE_SYSTEM_CATCH2     "Use system Catch2"     ON)
 option(MODPILE_ENABLE_MPRIS          "Enable MPRIS D-Bus support (requires libsystemd)" ON)
 
@@ -71,12 +72,28 @@ endif()
 
 
 find_package(SQLite3 REQUIRED)
-find_package(OpenAL REQUIRED)
 find_package(CURL REQUIRED)
 
 include(FetchContent)
 
 set(BUILD_SHARED_LIBS OFF)
+
+if(MODPILE_USE_SYSTEM_OPENAL)
+	find_package(OpenAL REQUIRED)
+else()
+	FetchContent_Declare(
+		openal-soft
+		GIT_SHALLOW    ON
+		GIT_REPOSITORY https://github.com/kcat/openal-soft
+		GIT_TAG        c41d64c6a35f6174bf4a27010aeac52a8d3bb2c6 # 1.25.1
+	)
+
+	set(ALSOFT_EXAMPLES OFF)
+	set(ALSOFT_TESTS    OFF)
+	set(ALSOFT_UTILS    OFF)
+	set(ALSOFT_INSTALL  OFF)
+	FetchContent_MakeAvailable(openal-soft)
+endif()
 
 if(MODPILE_USE_SYSTEM_EBUR128)
 	pkg_check_modules(ebur128 REQUIRED IMPORTED_TARGET libebur128)
