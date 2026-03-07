@@ -55,6 +55,7 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 | `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
+| `MODPILE_USE_SYSTEM_OPENAL`     | `ON`    | Use system OpenAL Soft; set `OFF` to fetch and build from source (1.25.1)         |
 | `MODPILE_USE_SYSTEM_CATCH2`     | `ON`    | Use system Catch2 (requires v3); set `OFF` to fetch and build from source         |
 
 ### Debian / Ubuntu / Mint / Pop / Elementary / Zorin / Neon
