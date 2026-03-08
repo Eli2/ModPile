@@ -137,7 +137,7 @@ struct AppState {
 					dsc
 				};
 				std::string query;
-				int sortColNr = 2;
+				std::string sortCol = "meta.file_name";
 				Order order = Order::asc;
 				long offset = 0;
 				long limit = 20;

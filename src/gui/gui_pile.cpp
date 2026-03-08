@@ -62,31 +62,38 @@ void gui_pile(AppState &app) {
 		ImGuiTableFlags_Borders |
 		ImGuiTableFlags_SizingFixedFit;
 
-	if(ImGui::BeginTable("Pile", 10, tblFlags)) {
-		ImGui::TableSetupColumn("play",
-			ImGuiTableColumnFlags_NoSort |
-			ImGuiTableColumnFlags_WidthFixed |
-			ImGuiTableColumnFlags_NoHide |
-			ImGuiTableColumnFlags_NoHeaderLabel,
-			30.f
-		);
-		ImGui::TableSetupColumn("+pl",
-			ImGuiTableColumnFlags_NoSort |
-			ImGuiTableColumnFlags_WidthFixed |
-			ImGuiTableColumnFlags_NoHide |
-			ImGuiTableColumnFlags_NoHeaderLabel,
-			30.f
-		);
+	// Each entry maps ImGui column index → SQL column name (nullptr = not sortable)
+	static const char* kColSortName[] = {
+		nullptr,           // play
+		nullptr,           // +pl
+		"meta.file_name",  // file
+		"meta.file_size",  // size
+		"modland.artist",  // artist
+		"meta.name",       // name
+		"meta.bpm",        // bpm
+		"meta.duration",   // duration
+		"meta.loudness",   // loudness
+		"play.rating",     // rating
+	};
 
-		// KEEP IN SYNC WITH db_query
-		ImGui::TableSetupColumn("file",     ImGuiTableColumnFlags_WidthStretch, 4.f);
-		ImGui::TableSetupColumn("size",     ImGuiTableColumnFlags_WidthFixed, 40.f);
-		ImGui::TableSetupColumn("artist",   ImGuiTableColumnFlags_WidthStretch, 2.f);
-		ImGui::TableSetupColumn("name",     ImGuiTableColumnFlags_WidthStretch, 3.f);
-		ImGui::TableSetupColumn("bpm",      ImGuiTableColumnFlags_WidthFixed, 0.f);
-		ImGui::TableSetupColumn("duration", ImGuiTableColumnFlags_WidthFixed, 80.f);
-		ImGui::TableSetupColumn("loudness", ImGuiTableColumnFlags_WidthFixed, 0.f);
-		ImGui::TableSetupColumn("rating",   ImGuiTableColumnFlags_WidthFixed, 0.f);
+	if(ImGui::BeginTable("Pile", std::size(kColSortName), tblFlags)) {
+		
+		constexpr auto btnColFlgs =
+			ImGuiTableColumnFlags_NoSort |
+			ImGuiTableColumnFlags_WidthFixed |
+			ImGuiTableColumnFlags_NoHide |
+			ImGuiTableColumnFlags_NoHeaderLabel;
+			
+		ImGui::TableSetupColumn("play",     btnColFlgs,                         32.f);
+		ImGui::TableSetupColumn("+pl",      btnColFlgs,                         24.f);
+		ImGui::TableSetupColumn("file",     ImGuiTableColumnFlags_WidthStretch,  4.f);
+		ImGui::TableSetupColumn("size",     ImGuiTableColumnFlags_WidthFixed,   40.f);
+		ImGui::TableSetupColumn("artist",   ImGuiTableColumnFlags_WidthStretch,  2.f);
+		ImGui::TableSetupColumn("name",     ImGuiTableColumnFlags_WidthStretch,  3.f);
+		ImGui::TableSetupColumn("bpm",      ImGuiTableColumnFlags_WidthFixed,    0.f);
+		ImGui::TableSetupColumn("duration", ImGuiTableColumnFlags_WidthFixed,   80.f);
+		ImGui::TableSetupColumn("loudness", ImGuiTableColumnFlags_WidthFixed,    0.f);
+		ImGui::TableSetupColumn("rating",   ImGuiTableColumnFlags_WidthFixed,    0.f);
 
 		ImGui::TableHeadersRow();
 
@@ -95,7 +102,8 @@ void gui_pile(AppState &app) {
 			specs->SpecsDirty = false;
 			if(specs->SpecsCount > 0) {
 				auto spec = specs->Specs[0];
-				app.pile.state.query.sortColNr = spec.ColumnIndex + 1;
+				if(kColSortName[spec.ColumnIndex])
+					app.pile.state.query.sortCol = kColSortName[spec.ColumnIndex];
 				if(spec.SortDirection == ImGuiSortDirection_Ascending) {
 					app.pile.state.query.order = AppState::Pile::State::Query::Order::asc;
 				} else {

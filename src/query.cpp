@@ -84,7 +84,7 @@ static void query(const Query &query, Response &response) {
 		;
 	)",
 	sqlAdd,
-	query.sortColNr,
+	query.sortCol,
 	orderStr);
 
 	SQLITE_FINALIZE sqlite3_stmt *stmt = NULL;
