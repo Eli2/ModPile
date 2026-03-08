@@ -12,6 +12,7 @@
 #include "task/import.h"
 #include "task/load.h"
 #include "task/modland.h"
+#include "task/vacuum.h"
 #include "task_util.h"
 #include "util/sqlite_util.h"
 #include "util/thread_util.h"
@@ -142,6 +143,10 @@ struct ExportPlaylist {
 	std::vector<ExportTrack> tracks;
 };
 
+struct VacuumInto {
+	std::filesystem::path path;
+};
+
 // ============================================================================
 
 using Tasks = std::variant<
@@ -155,7 +160,8 @@ using Tasks = std::variant<
 	ModlandDownloadMissingFiles,
 	ImportPlay,
 	ExportPlay,
-	ExportPlaylist
+	ExportPlaylist,
+	VacuumInto
 >;
 
 static queue<Tasks>     g_taskQueue;
@@ -178,6 +184,7 @@ static std::string task_name(const Tasks &task) {
 		[](const ImportPlay &t)                   { return std::format("Import play: {}", t.path.filename().string()); },
 		[](const ExportPlay &t)                   { return std::format("Export play: {}", t.path.filename().string()); },
 		[](const ExportPlaylist &t)               { return std::format("Export: {}", t.playlist_name); },
+		[](const VacuumInto &t)                   { return std::format("Vacuum into: {}", t.path.filename().string()); },
 	}, task);
 }
 
@@ -235,6 +242,9 @@ void task_init(AppState &app) {
 				},
 				[&](ExportPlaylist &t){
 					export_playlist_run(g_taskControl, db, t.directory, t.playlist_name, t.tracks);
+				},
+				[&](VacuumInto &t){
+					vacuum_run(g_taskControl, db, t.path);
 				}
 			}, q);
 
@@ -332,4 +342,8 @@ void task_export_playlist(
 	ep.playlist_name = std::move(playlist_name);
 	ep.tracks = std::move(tracks);
 	g_taskQueue.push(std::move(ep));
+}
+
+void task_vacuum_into(std::filesystem::path path) {
+	g_taskQueue.push(VacuumInto{std::move(path)});
 }

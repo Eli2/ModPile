@@ -253,6 +253,8 @@ add_executable(ModPile
 	src/task/load.h
 	src/task/modland.cpp
 	src/task/modland.h
+	src/task/vacuum.cpp
+	src/task/vacuum.h
 	src/task_util.cpp
 	src/task_util.h
 	src/task.cpp

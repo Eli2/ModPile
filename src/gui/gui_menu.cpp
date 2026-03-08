@@ -70,6 +70,13 @@ void gui_menu(AppState &app) {
 					}, nullptr, app.window, nullptr, 0, "play.tsv");
 				}
 				ImGui::SetItemTooltip("Export play history to a TSV file.");
+				if(ImGui::MenuItem("Vacuum into...")) {
+					SDL_ShowSaveFileDialog([](void *userdata, const char * const *filelist, int) {
+						if(filelist && *filelist)
+							task_vacuum_into(std::filesystem::path(*filelist));
+					}, nullptr, app.window, nullptr, 0, "ModPile.db");
+				}
+				ImGui::SetItemTooltip("Write a compacted copy of the database to a new file.");
 				if(ImGui::MenuItem("Update fulltext index")) {
 					task_update_fulltext_search();
 				}

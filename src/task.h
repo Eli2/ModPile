@@ -41,3 +41,5 @@ void task_export_playlist(
 	std::filesystem::path directory,
 	std::string playlist_name,
 	std::vector<ExportTrack> tracks);
+
+void task_vacuum_into(std::filesystem::path path);
