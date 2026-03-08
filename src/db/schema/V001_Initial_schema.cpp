@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2026 Eli2
 
-// TODO mark tables as ") STRICT"
-
 extern const char* const V001_sql = R"(
 
 	-- BLOB colum must come last for performance
@@ -11,7 +9,7 @@ extern const char* const V001_sql = R"(
 		name  TEXT                 NOT NULL,
 		size  INTEGER              NOT NULL,
 		data  BLOB                 NOT NULL
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS meta(
@@ -25,7 +23,7 @@ extern const char* const V001_sql = R"(
 		bpm        INTEGER           ,
 		duration   INTEGER           ,
 		loudness   REAL
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS modland(
@@ -34,19 +32,19 @@ extern const char* const V001_sql = R"(
 		artist TEXT                 NOT NULL,
 		name   TEXT                 NOT NULL,
 		path   TEXT                 NOT NULL
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS modland_meta(
 		md5    TEXT    PRIMARY KEY  NOT NULL,
 		bad    INTEGER
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS modland_format(
 		format        TEXT    PRIMARY KEY  NOT NULL,
 		xmp_supported INTEGER              NOT NULL
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS play(
@@ -58,7 +56,7 @@ extern const char* const V001_sql = R"(
 		played          INTEGER              NOT NULL,
 		skipped         INTEGER              NOT NULL,
 		duration        INTEGER              NOT NULL
-	)
+	) STRICT
 	;
 
 	CREATE VIRTUAL TABLE IF NOT EXISTS text_index
@@ -76,7 +74,7 @@ extern const char* const V001_sql = R"(
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		description TEXT
-	)
+	) STRICT
 	;
 
 	CREATE TABLE IF NOT EXISTS playlist_track (
@@ -85,7 +83,7 @@ extern const char* const V001_sql = R"(
 		track_id TEXT NOT NULL,
 		track_order INTEGER NOT NULL,
 		FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE
-	)
+	) STRICT
 	;
 
 )";
