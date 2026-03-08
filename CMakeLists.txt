@@ -241,6 +241,9 @@ set(hash_util_srcs
 )
 
 add_executable(ModPile
+	src/db/schema/schema.cpp
+	src/db/schema/schema.h
+	src/db/schema/V001_Initial_schema.cpp
 	src/task/analyze.cpp
 	src/task/analyze.h
 	src/task/check.cpp
