@@ -32,7 +32,7 @@ void log_internal(const char * file, int line, LogLevel level, std::format_strin
 		}(level);
 		
 		
-		std::cout << std::format("{} {: <24}", prefix, std::format("{}:{}", foo, line)) <<
+		std::cout << std::format("{} {: <32}", prefix, std::format("{}:{}", foo, line)) <<
 		    std::format(f, std::forward<T>(p)...) << std::endl;
 	}
 }
