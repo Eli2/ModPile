@@ -416,15 +416,22 @@ add_executable(ModPileTest
 	${hash_util_srcs}
 	src/util/str_util.h
 	src/util/str_util.cpp
-	
+	src/log.h
+	src/log.cpp
+	src/db/schema/schema.h
+	src/db/schema/schema.cpp
+	src/db/schema/V001_Initial_schema.cpp
+
 	test/test_hash_util.cpp
 	test/test_str_util.cpp
+	test/test_db_migrate.cpp
 )
 target_compile_features(ModPileTest PRIVATE
 	cxx_std_20
 )
 target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
+	SQLite::SQLite3
 )
 
 include(CTest)
