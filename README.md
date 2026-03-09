@@ -58,7 +58,7 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 | `MODPILE_USE_SYSTEM_OPENAL`     | `ON`    | Use system OpenAL Soft; set `OFF` to fetch and build from source (1.25.1)         |
 | `MODPILE_USE_SYSTEM_CATCH2`     | `ON`    | Use system Catch2 (requires v3); set `OFF` to fetch and build from source         |
 
-### Debian / Ubuntu / Mint / Pop / Elementary / Zorin / Neon
+### Debian / Ubuntu / Mint / Pop
 
 ```sh
 sudo apt install \
@@ -89,7 +89,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-### Arch Linux / Manjaro / Endeavour / Garuda / Artix
+### Arch / Manjaro / CachyOS 
 
 Note: `libebur128` and `kissfft` are not in the official repos. Use the flags below to fetch them automatically, or install them from the AUR.
 
@@ -103,7 +103,7 @@ sudo pacman -S --needed \
     curl \
     libarchive \
     libxmp \
-    systemd \
+    libsystemd \
     zstd \
     glm \
     sdl3 \
@@ -123,7 +123,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-### Fedora / RHEL / CentOS / Rocky / Alma
+### Fedora / Bazzite
 
 Note: `libebur128`, `kissfft`, `zstd`, and `catch2` (v3) are not available in the official repos. Use the flags below to fetch them automatically.
 
