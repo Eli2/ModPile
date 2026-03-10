@@ -162,9 +162,17 @@ void gui_playlist(AppState &app) {
 
 		ImGui::TableHeadersRow();
 
+		const auto playing_pl_track_id = app.player.state.current_playlist_track_id.load();
+		const auto playing_pl_id       = app.player.state.current_playing_playlist_id.load();
+		const bool in_charts           = app.player.state.in_charts_mode.load();
+
 		for(size_t idx = 0; idx < app.playlist.state.rows.size(); ++idx) {
 			auto &r = app.playlist.state.rows[idx];
 			ImGui::TableNextRow();
+			if(!in_charts && r.playlist_track_id == playing_pl_track_id && r.playlist_id == playing_pl_id) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImGuiCol_Header));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Header));
+			}
 
 			ImGui::TableNextColumn();
 			auto uniqeId = std::format("{}{}", r.playlist_track_id, r.id);

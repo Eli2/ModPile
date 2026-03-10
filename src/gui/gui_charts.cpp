@@ -77,9 +77,15 @@ void gui_charts(AppState &app) {
 		ImGui::TableSetupColumn("play duration", ImGuiTableColumnFlags_WidthFixed,  80.f);
 		ImGui::TableHeadersRow();
 
+		const auto playing_id = app.player.track.id.get();
+
 		for(size_t idx = 0; idx < app.charts.state.rows.size(); ++idx) {
 			auto &r = app.charts.state.rows[idx];
 			ImGui::TableNextRow();
+			if(r.id == playing_id) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImGuiCol_Header));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Header));
+			}
 
 			ImGui::TableNextColumn();
 			ImGui::PushID(static_cast<int>(idx));

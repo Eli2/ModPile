@@ -114,9 +114,14 @@ void gui_pile(AppState &app) {
 		}
 
 		const auto active_playlist_id = app.playlist.state.current_playlist_id;
+		const auto playing_id = app.player.track.id.get();
 
 		for(auto &r : app.pile.state.response.rows) {
 			ImGui::TableNextRow();
+			if(r.id == playing_id) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImGuiCol_Header));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Header));
+			}
 
 			ImGui::TableNextColumn();
 			ImGui::PushID(r.id.c_str());
