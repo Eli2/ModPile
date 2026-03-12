@@ -3,6 +3,9 @@
 #include "gui_pile.h"
 #include "gui_common.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include "imgui.h"
 
 #include "util/str_util.h"
@@ -57,6 +60,7 @@ void gui_pile(AppState &app) {
 		ImGuiTableFlags_Reorderable |
 		ImGuiTableFlags_Hideable |
 		ImGuiTableFlags_Sortable |
+		ImGuiTableFlags_SortMulti |
 		ImGuiTableFlags_ScrollY |
 		ImGuiTableFlags_RowBg |
 		ImGuiTableFlags_Borders |
@@ -100,15 +104,21 @@ void gui_pile(AppState &app) {
 		auto specs = ImGui::TableGetSortSpecs();
 		if(specs->SpecsDirty) {
 			specs->SpecsDirty = false;
-			if(specs->SpecsCount > 0) {
-				auto spec = specs->Specs[0];
-				if(kColSortName[spec.ColumnIndex])
-					app.pile.state.query.sortCol = kColSortName[spec.ColumnIndex];
-				if(spec.SortDirection == ImGuiSortDirection_Ascending) {
-					app.pile.state.query.order = AppState::Pile::State::Query::Order::asc;
-				} else {
-					app.pile.state.query.order = AppState::Pile::State::Query::Order::dsc;
-				}
+			// Collect indices sorted by SortOrder (primary first)
+			std::vector<int> order(specs->SpecsCount);
+			std::iota(order.begin(), order.end(), 0);
+			std::sort(order.begin(), order.end(), [&](int a, int b){
+				return specs->Specs[a].SortOrder < specs->Specs[b].SortOrder;
+			});
+			auto &sortSpecs = app.pile.state.query.sortSpecs;
+			sortSpecs.clear();
+			for(int i : order) {
+				const auto &spec = specs->Specs[i];
+				if(!kColSortName[spec.ColumnIndex]) continue;
+				auto dir = spec.SortDirection == ImGuiSortDirection_Ascending
+					? AppState::Pile::State::Query::Order::asc
+					: AppState::Pile::State::Query::Order::dsc;
+				sortSpecs.push_back({kColSortName[spec.ColumnIndex], dir});
 			}
 			app.pile.request.executeQuery = true;
 		}

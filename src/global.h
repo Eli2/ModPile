@@ -136,9 +136,12 @@ struct AppState {
 					asc,
 					dsc
 				};
+				struct SortSpec {
+					std::string col;
+					Order order = Order::asc;
+				};
 				std::string query;
-				std::string sortCol = "meta.file_name";
-				Order order = Order::asc;
+				std::vector<SortSpec> sortSpecs = {{"meta.file_name", Order::asc}};
 				long offset = 0;
 				long limit = 20;
 			} query;

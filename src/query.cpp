@@ -41,9 +41,18 @@ static void query(const Query &query, Response &response) {
 		case Query::Order::asc: return "ASC NULLS LAST";
 		case Query::Order::dsc: return "DESC NULLS LAST";
 		}
-	}(query.order);
-	
-	
+	};
+
+	std::string sortOrderStr;
+	for(const auto &spec : query.sortSpecs) {
+		if(!sortOrderStr.empty()) sortOrderStr += ", ";
+		sortOrderStr += spec.col;
+		sortOrderStr += ' ';
+		sortOrderStr += orderStr(spec.order);
+	}
+	if(sortOrderStr.empty()) sortOrderStr = "meta.file_name ASC NULLS LAST";
+
+
 	std::string sqlAdd = "";
 	if(maybeSha1(query.query)) {
 		sqlAdd = R"(
@@ -78,14 +87,13 @@ static void query(const Query &query, Response &response) {
 			modland ON modland.md5 == meta.md5
 		{}
 		ORDER BY
-			{} {}
+			{}
 		LIMIT ?2
 		OFFSET ?3
 		;
 	)",
 	sqlAdd,
-	query.sortCol,
-	orderStr);
+	sortOrderStr);
 
 	SQLITE_FINALIZE sqlite3_stmt *stmt = NULL;
 	int rc = sqlite3_prepare_v2(g_queryConnection, sql.c_str(), -1, &stmt, NULL);
