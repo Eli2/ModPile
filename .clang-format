@@ -3,7 +3,7 @@ Language: Cpp
 BasedOnStyle: LLVM
 
 # The project predominantly uses tabs, with a visual width of four columns.
-UseTab: ForIndentation
+UseTab: Always
 TabWidth: 4
 IndentWidth: 4
 ContinuationIndentWidth: 4
@@ -15,7 +15,7 @@ SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 PointerAlignment: Right
 ReferenceAlignment: Right
-DerivePointerAlignment: false
+DerivePointerAlignment: true
 
 # Existing code intentionally keeps compact guards and small functions inline.
 AllowShortBlocksOnASingleLine: Empty
@@ -32,17 +32,19 @@ ColumnLimit: 0
 # Preserve local alignment without creating broad new alignment groups.
 AlignConsecutiveAssignments: None
 AlignConsecutiveDeclarations: None
-AlignOperands: Align
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
 AlignTrailingComments: true
 
 BinPackArguments: true
 BinPackParameters: true
 Cpp11BracedListStyle: true
-IndentCaseLabels: true
+IndentCaseLabels: false
 IndentPPDirectives: None
 KeepEmptyLinesAtTheStartOfBlocks: true
 MaxEmptyLinesToKeep: 3
 NamespaceIndentation: None
+LambdaBodyIndentation: OuterScope
 AccessModifierOffset: -4
 EmptyLineBeforeAccessModifier: Never
 ReflowComments: false
