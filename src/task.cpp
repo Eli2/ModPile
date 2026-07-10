@@ -191,6 +191,7 @@ static std::string task_name(const Tasks &task) {
 void task_init(AppState &app) {
 	
 	g_taskThread = std::thread([&](){
+	thread_exception_guard("db_task", [&](){
 		SQLITE_CLOSE sqlite3* db = db_open(app);
 		if(!db) {
 			log_error("Failed to open task DB connection");
@@ -208,6 +209,8 @@ void task_init(AppState &app) {
 			g_currentTaskName.set(task_name(q));
 			
 			bool exit = false;
+			bool failed = false;
+			try {
 			std::visit(overload{
 				[&](Poison &p){
 					log_info("Task worker poisoned");
@@ -247,15 +250,26 @@ void task_init(AppState &app) {
 					vacuum_run(g_taskControl, db, t.path);
 				}
 			}, q);
+			} catch(const std::exception &e) {
+				failed = true;
+				log_error("Task failed with exception: {}", e.what());
+				g_taskControl.statusline2.set(std::format("FAILED: {}", e.what()));
+			} catch(...) {
+				failed = true;
+				log_error("Task failed with unknown exception");
+				g_taskControl.statusline2.set("FAILED: unknown exception");
+			}
 
 			g_currentTaskName.set("");
 			//g_taskControl.statusline.set("");
-			g_taskControl.statusline2.set("DONE");
+			if(!failed)
+				g_taskControl.statusline2.set("DONE");
 
 			if(exit) {
 				break;
 			}
 		}
+	});
 	});
 	thread_set_name(g_taskThread, "db_task");
 }

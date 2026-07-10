@@ -39,6 +39,7 @@ void numblock_init(AppState &app) {
 	g_numblockThreadRunning = true;
 
 	g_numblockThread = std::thread([&](){
+	thread_exception_guard("Numblock", [&](){
 		int r;
 		long openBackoff = 1000;
 		while(g_numblockThreadRunning) {
@@ -199,6 +200,7 @@ void numblock_init(AppState &app) {
 		}
 		
 		SDL_CleanupTLS();
+	});
 	});
 	thread_set_name(g_numblockThread, "Numblock");
 }

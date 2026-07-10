@@ -157,6 +157,7 @@ void db_query_init(AppState &app) {
 	
 	try {
 	g_queryThread = std::thread([](){
+	thread_exception_guard("Query", [](){
 		while(true) {
 			Query q;
 			{
@@ -175,13 +176,22 @@ void db_query_init(AppState &app) {
 			
 			g_queryCancel = false;
 			Response r;
-			query(q, r);
+			try {
+				query(q, r);
+			} catch(const std::exception &e) {
+				log_error("Query failed with exception: {}", e.what());
+				continue;
+			} catch(...) {
+				log_error("Query failed with unknown exception");
+				continue;
+			}
 			
 			{
 				std::unique_lock lock(g_queryMutex);
 				g_queryResponse = r;
 			}
 		}
+	});
 	});
 	thread_set_name(g_queryThread, "Query");
 	} catch(const std::exception& e) {
