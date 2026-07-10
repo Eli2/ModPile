@@ -3,6 +3,7 @@
 #include "xmp_util.h"
 
 const char* xmpu_errstr(int err) {
+	// clang-format off
 	switch(err) {
 		case -XMP_ERROR_INTERNAL: return "Internal error";
 		case -XMP_ERROR_FORMAT:   return "Unsupported module format";
@@ -13,4 +14,5 @@ const char* xmpu_errstr(int err) {
 		case -XMP_ERROR_STATE:    return "Invalid player state";
 		default:                  return "UNKNOWN";
 	}
+	// clang-format on
 }

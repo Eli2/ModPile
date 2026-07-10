@@ -17,8 +17,9 @@ std::string calc_md5(const std::span<const std::byte> data) {
 	MD5_Final(digest, &ctx);
 	
 	std::ostringstream buf;
-	for(int i = 0; i < 4; ++i)
+	for(int i = 0; i < 4; ++i) {
 		buf << std::hex << std::setfill('0') << std::setw(8) << digest[i];
+	}
 	
 	return buf.str();
 }
@@ -32,8 +33,9 @@ std::string calc_sha1(const std::span<const std::byte> data) {
 	SHA1Final(digest, &ctx);
 	
 	std::ostringstream buf;
-	for(int i = 0; i < 5; ++i)
+	for(int i = 0; i < 5; ++i) {
 		buf << std::hex << std::setfill('0') << std::setw(8) << digest[i];
+	}
 	
 	return buf.str();
 }

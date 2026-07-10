@@ -23,10 +23,13 @@ public:
 		size_t head  = m_head.load(std::memory_order_relaxed);
 		size_t tail  = m_tail.load(std::memory_order_acquire);
 		size_t avail = N - (head - tail);
-		if (count > avail) count = avail;
-
-		for (size_t i = 0; i < count; ++i)
+		if (count > avail) {
+			count = avail;
+		}
+		
+		for (size_t i = 0; i < count; ++i) {
 			m_data[(head + i) & MASK] = items[i];
+		}
 
 		m_head.store(head + count, std::memory_order_release);
 		return count;
@@ -37,10 +40,13 @@ public:
 		size_t tail  = m_tail.load(std::memory_order_relaxed);
 		size_t head  = m_head.load(std::memory_order_acquire);
 		size_t avail = head - tail;
-		if (count > avail) count = avail;
-
-		for (size_t i = 0; i < count; ++i)
+		if (count > avail) {
+			count = avail;
+		}
+		
+		for (size_t i = 0; i < count; ++i) {
 			items[i] = m_data[(tail + i) & MASK];
+		}
 
 		m_tail.store(tail + count, std::memory_order_release);
 		return count;

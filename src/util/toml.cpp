@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <format>
 #include <fstream>
-#include <sstream>
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,23 +36,31 @@ bool TomlReader::load(const std::filesystem::path &path) {
 		std::string_view sv = trim(line);
 
 		// Skip blank lines and comments
-		if (sv.empty() || sv[0] == '#') continue;
+		if (sv.empty() || sv[0] == '#') {
+			continue;
+		}
 
 		// Section header [name]
 		if (sv[0] == '[') {
 			auto close = sv.find(']');
-			if (close == std::string_view::npos) continue;
+			if (close == std::string_view::npos) {
+				continue;
+			}
 			section = std::string(trim(sv.substr(1, close - 1)));
 			continue;
 		}
 
 		// key = value
 		auto eq = sv.find('=');
-		if (eq == std::string_view::npos) continue;
+		if (eq == std::string_view::npos) {
+			continue;
+		}
 		std::string key(trim(sv.substr(0, eq)));
 		std::string_view raw = trim(sv.substr(eq + 1));
-
-		if (key.empty() || section.empty()) continue;
+		
+		if (key.empty() || section.empty()) {
+			continue;
+		}
 
 		TomlValue val;
 
@@ -91,7 +98,9 @@ bool TomlReader::load(const std::filesystem::path &path) {
 			try {
 				val.type = TomlValue::Type::Integer;
 				val.i    = static_cast<int64_t>(std::stoull(std::string(raw), nullptr, 16));
-			} catch (...) { continue; }
+			} catch (...) {
+				continue;
+			}
 
 		// Float (contains '.' or 'e'/'E')
 		} else if (raw.find('.') != std::string_view::npos ||
@@ -100,14 +109,18 @@ bool TomlReader::load(const std::filesystem::path &path) {
 			try {
 				val.type = TomlValue::Type::Float;
 				val.f    = std::stod(std::string(raw));
-			} catch (...) { continue; }
+			} catch (...) {
+				continue;
+			}
 
 		// Integer
 		} else {
 			try {
 				val.type = TomlValue::Type::Integer;
 				val.i    = std::stoll(std::string(raw));
-			} catch (...) { continue; }
+			} catch (...) {
+				continue;
+			}
 		}
 
 		m_values[make_key(section, key)] = val;
@@ -117,31 +130,41 @@ bool TomlReader::load(const std::filesystem::path &path) {
 
 const TomlValue *TomlReader::find(std::string_view section, std::string_view key) const {
 	auto it = m_values.find(make_key(section, key));
-	if (it == m_values.end()) return nullptr;
+	if (it == m_values.end()) {
+		return nullptr;
+	}
 	return &it->second;
 }
 
 std::optional<std::string> TomlReader::get_string(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type != TomlValue::Type::String) return std::nullopt;
+	if (!v || v->type != TomlValue::Type::String) {
+		return std::nullopt;
+	}
 	return v->str;
 }
 
 std::optional<int64_t> TomlReader::get_integer(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type != TomlValue::Type::Integer) return std::nullopt;
+	if (!v || v->type != TomlValue::Type::Integer) {
+		return std::nullopt;
+	}
 	return v->i;
 }
 
 std::optional<double> TomlReader::get_float(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type != TomlValue::Type::Float) return std::nullopt;
+	if (!v || v->type != TomlValue::Type::Float) {
+		return std::nullopt;
+	}
 	return v->f;
 }
 
 std::optional<bool> TomlReader::get_bool(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type != TomlValue::Type::Bool) return std::nullopt;
+	if (!v || v->type != TomlValue::Type::Bool) {
+		return std::nullopt;
+	}
 	return v->b;
 }
 
@@ -204,7 +227,9 @@ void TomlWriter::write(std::string_view key, bool value) {
 
 bool TomlWriter::save(const std::filesystem::path &path) const {
 	std::ofstream f(path, std::ios::out | std::ios::binary);
-	if (!f) return false;
+	if (!f) {
+		return false;
+	}
 	f.write(m_buf.data(), static_cast<std::streamsize>(m_buf.size()));
 	return f.good();
 }

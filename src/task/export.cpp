@@ -124,7 +124,9 @@ void export_playlist_run(
 	xspf << "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n";
 	xspf << "\t<trackList>\n";
 	for(size_t i = 0; i < tracks.size(); ++i) {
-		if(written_names[i].empty()) continue;
+		if(written_names[i].empty()) {
+			continue;
+		}
 		const auto &t = tracks[i];
 		xspf << "\t\t<track>\n";
 		xspf << "\t\t\t<location>" << uri_encode(written_names[i]) << "</location>\n";

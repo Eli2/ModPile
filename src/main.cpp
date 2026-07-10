@@ -127,7 +127,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 		log_info("ZSTD version: {}", version);
 	}
 	{
-		log_info("IMGUI: {}", IMGUI_VERSION);
+		auto version = IMGUI_VERSION;
+		log_info("IMGUI: {}", version);
 	}
 
 

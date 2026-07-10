@@ -21,8 +21,9 @@ static int method_noop(
 	int r;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -41,8 +42,9 @@ static int get_false(
 	uint32_t value = 0;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_BOOLEAN, &value);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -61,8 +63,9 @@ static int get_true(
 	uint32_t value = 1;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_BOOLEAN, &value);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -80,8 +83,9 @@ static int get_double_one(
 	double value = 1.0;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_DOUBLE, &value);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -98,8 +102,9 @@ static int set_nop(
 	int r;
 	
 	r = sd_bus_reply_method_return(value, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -135,8 +140,9 @@ static int Quit(
 	app.request.quit = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -154,8 +160,9 @@ static int Identity(
 	auto id = "ModPile";
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_STRING, id);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -175,8 +182,9 @@ static int SupportedUriSchemes(
 	};
 	
 	r = sd_bus_message_append_strv(reply, (char **)schemes);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -194,13 +202,16 @@ static int SupportedMimeTypes(
 	static const char * const types[] = { nullptr };
 	
 	r = sd_bus_message_append_strv(reply, (char **)types);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
 
 static const auto interface = "org.mpris.MediaPlayer2";
+
+// clang-format off
 static const sd_bus_vtable vtable[] = {
 	SD_BUS_VTABLE_START(0),
 	// Methods
@@ -218,6 +229,7 @@ static const sd_bus_vtable vtable[] = {
 	PROP_CONST("SupportedMimeTypes",  "as", SupportedMimeTypes),
 	SD_BUS_VTABLE_END,
 };
+// clang-format on
 
 } // MediaPlayer2
 
@@ -234,8 +246,9 @@ static int Next(
 	app.player.request.next = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -251,8 +264,9 @@ static int Previous(
 	app.player.request.prev = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -268,8 +282,9 @@ static int Pause(
 	app.player.request.pause = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -285,8 +300,9 @@ static int PlayPause(
 	app.player.request.playToggle = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -302,8 +318,9 @@ static int Stop(
 	app.player.request.stop = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -319,8 +336,9 @@ static int Play(
 	app.player.request.play = true;
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -335,14 +353,16 @@ static int Seek(
 	
 	int64_t val = 0;
 	r = sd_bus_message_read_basic(m, SD_BUS_TYPE_INT64, &val);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	app.player.request.seek.store(val / 1000);
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -360,13 +380,15 @@ static int SetPosition(
 	
 	const char *path = nullptr;
 	r = sd_bus_message_read_basic(m, SD_BUS_TYPE_OBJECT_PATH, &path);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	int64_t val = 0;
 	r = sd_bus_message_read_basic(m, SD_BUS_TYPE_INT64, &val);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	// If mismatch we got an old request
 	if(path && std::string_view(path) == currPath) {
@@ -374,8 +396,9 @@ static int SetPosition(
 	}
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -389,14 +412,16 @@ static int OpenUri(
 	
 	const char *path = nullptr;
 	r = sd_bus_message_read_basic(m, SD_BUS_TYPE_STRING, &path);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	// TODO implement
 	
 	r = sd_bus_reply_method_return(m, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -426,8 +451,9 @@ static int get_PlaybackStatus(
 	}(app.player.state.playback_status);
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_STRING, str);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -454,8 +480,9 @@ static int get_LoopStatus(
 	}(app.player.state.loop_status);
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_STRING, str);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -474,10 +501,13 @@ static int set_LoopStatus(
 	
 	const char *t = nullptr;
 	r = sd_bus_message_read_basic(value, SD_BUS_TYPE_STRING, &t);
-	if(r < 0)
+	if(r < 0) {
 		return r;
-	if(!t)
+	}
+	
+	if(!t) {
 		return -EINVAL;
+	}
 
 	std::string_view s = t;
 	if(s == "None") {
@@ -509,8 +539,9 @@ static int get_Shuffle(
 
 	const uint32_t s = app.player.state.shuffle.load() ? 1 : 0;
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_BOOLEAN, &s);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 
 	return 0;
 }
@@ -529,14 +560,16 @@ static int set_Shuffle(
 
 	uint32_t s = 0;
 	r = sd_bus_message_read_basic(value, SD_BUS_TYPE_BOOLEAN, &s);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 
 	app.player.state.shuffle = (s != 0);
 
 	r = sd_bus_reply_method_return(value, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 
 	return 0;
 }
@@ -556,8 +589,9 @@ static int get_Volume(
 	double vol = app.player.state.gain;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_DOUBLE, &vol);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -576,16 +610,18 @@ static int set_Volume(
 	
 	double vol = 0;
 	r = sd_bus_message_read_basic(value, SD_BUS_TYPE_DOUBLE, &vol);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	vol = std::clamp(vol, 0.0, 1.0);
 	
 	app.player.state.gain.store(static_cast<float>(vol));
 	
 	r = sd_bus_reply_method_return(value, "");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -606,8 +642,9 @@ static int get_Position(
 	pos *= 1000;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_INT64, &pos);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -621,31 +658,37 @@ static int append_key_value(
 	int r;
 	
 	r = sd_bus_message_open_container(m, SD_BUS_TYPE_DICT_ENTRY, "sv");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	r = sd_bus_message_append_basic(m, SD_BUS_TYPE_STRING, key);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	{
 		const char contents[] = { type, 0 };
 		r = sd_bus_message_open_container(m, SD_BUS_TYPE_VARIANT, contents);
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 		
 		r = sd_bus_message_append_basic(m, type, value);
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 		
 		r = sd_bus_message_close_container(m);
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 	}
 	
 	r = sd_bus_message_close_container(m);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
@@ -678,21 +721,24 @@ static int get_Metadata(
 	int r;
 	
 	r = sd_bus_message_open_container(reply, SD_BUS_TYPE_ARRAY, "{sv}");
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	std::string id = app.player.track.id.get();
 	if(!id.empty()) {
 		std::string foo = std::format("/{}", id);
 		r = append_key_path(reply, "mpris:trackid", foo.c_str());
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 		
 		long duration = app.player.track.length;
 		duration *= 1000;
 		r = append_key_int64(reply, "mpris:length", duration);
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 		
 		// auto img = "data:image/gif;base64,R0lGODdhAQABAPAAAP8AAAAAACwAAAAAAQABAAACAkQBADs=";
 		// r = mpris_msg_append_ss_dict(reply, "mpris:artUrl", img);
@@ -700,20 +746,24 @@ static int get_Metadata(
 		// 	return r;
 		
 		std::string s = app.player.track.name.get();
+		
 		r = append_key_string(reply, "xesam:title", s.c_str());
-		if(r < 0)
+		if(r < 0) {
 			return r;
+		}
 	}
 	
 	r = sd_bus_message_close_container(reply);
-	if(r < 0)
+	if(r < 0) {
 		return r;
+	}
 	
 	return 0;
 }
 
 static const auto interface = "org.mpris.MediaPlayer2.Player";
 
+// clang-format off
 static const sd_bus_vtable vtable[] = {
 	SD_BUS_VTABLE_START(0),
 	// Methods
@@ -746,6 +796,7 @@ static const sd_bus_vtable vtable[] = {
 	PROP_CONST ("CanControl",      "b",     get_true),
 	SD_BUS_VTABLE_END,
 };
+// clang-format on
 
 } // MediaPlayer2::Player
 
@@ -775,8 +826,10 @@ void mpris_seeked(AppState &app)
 		"x",
 		pos
 	);
-	if(r < 0)
+	
+	if(r < 0) {
 		log_error("MPRIS Seeked signal error {}", strerror(-r));
+	}
 }
 
 void mpris_init(AppState &app)
@@ -898,8 +951,9 @@ void mpris_iterate(AppState &app)
 			MediaPlayer2::Player::interface,
 			const_cast<char **>(changed.data())
 		);
-		if(r < 0)
+		if(r < 0) {
 			log_error("MPRIS PropertiesChanged error {}", strerror(-r));
+		}
 	}
 }
 

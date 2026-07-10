@@ -114,7 +114,9 @@ void gui_pile(AppState &app) {
 			sortSpecs.clear();
 			for(int i : order) {
 				const auto &spec = specs->Specs[i];
-				if(!kColSortName[spec.ColumnIndex]) continue;
+				if(!kColSortName[spec.ColumnIndex]) {
+					continue;
+				}
 				auto dir = spec.SortDirection == ImGuiSortDirection_Ascending
 					? AppState::Pile::State::Query::Order::asc
 					: AppState::Pile::State::Query::Order::dsc;

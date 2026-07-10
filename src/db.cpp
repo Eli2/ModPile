@@ -82,8 +82,9 @@ bool db_init(AppState &app) {
 		sqlite3_stmt* stmt = nullptr;
 		int32_t app_id = 0;
 		if(sqlite3_prepare_v2(db, "PRAGMA application_id", -1, &stmt, nullptr) == SQLITE_OK) {
-			if(sqlite3_step(stmt) == SQLITE_ROW)
+			if(sqlite3_step(stmt) == SQLITE_ROW) {
 				app_id = sqlite3_column_int(stmt, 0);
+			}
 			sqlite3_finalize(stmt);
 		}
 

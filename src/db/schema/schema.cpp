@@ -56,11 +56,14 @@ static int64_t now_ms() {
 static int current_version(sqlite3 *db) {
 	const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migration WHERE success = 1";
 	sqlite3_stmt *stmt = nullptr;
-	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return 0;
+	}
+	
 	int v = 0;
-	if(sqlite3_step(stmt) == SQLITE_ROW)
+	if(sqlite3_step(stmt) == SQLITE_ROW) {
 		v = sqlite3_column_int(stmt, 0);
+	}
 	sqlite3_finalize(stmt);
 	return v;
 }

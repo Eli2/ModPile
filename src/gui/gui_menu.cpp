@@ -58,22 +58,25 @@ void gui_menu(AppState &app) {
 			if(ImGui::BeginMenu("Database")) {
 				if(ImGui::MenuItem("Import playstats")) {
 					SDL_ShowOpenFileDialog([](void *userdata, const char * const *filelist, int) {
-						if(filelist && *filelist)
+						if(filelist && *filelist) {
 							task_import_play(std::filesystem::path(*filelist));
+						}
 					}, nullptr, app.window, nullptr, 0, nullptr, false);
 				}
 				ImGui::SetItemTooltip("Import play history from a TSV file into the database.");
 				if(ImGui::MenuItem("Export playstats")) {
 					SDL_ShowSaveFileDialog([](void *userdata, const char * const *filelist, int) {
-						if(filelist && *filelist)
+						if(filelist && *filelist) {
 							task_export_play(std::filesystem::path(*filelist));
+						}
 					}, nullptr, app.window, nullptr, 0, "play.tsv");
 				}
 				ImGui::SetItemTooltip("Export play history to a TSV file.");
 				if(ImGui::MenuItem("Vacuum into...")) {
 					SDL_ShowSaveFileDialog([](void *userdata, const char * const *filelist, int) {
-						if(filelist && *filelist)
+						if(filelist && *filelist) {
 							task_vacuum_into(std::filesystem::path(*filelist));
+						}
 					}, nullptr, app.window, nullptr, 0, "ModPile.db");
 				}
 				ImGui::SetItemTooltip("Write a compacted copy of the database to a new file.");
