@@ -1,9 +1,10 @@
 ---
 Language: Cpp
 BasedOnStyle: LLVM
+AlwaysBreakTemplateDeclarations: Yes
 
 # The project predominantly uses tabs, with a visual width of four columns.
-UseTab: Always
+UseTab: ForIndentation
 TabWidth: 4
 IndentWidth: 4
 ContinuationIndentWidth: 4
@@ -13,33 +14,35 @@ BreakBeforeBraces: Attach
 SpaceBeforeParens: Never
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
-PointerAlignment: Right
-ReferenceAlignment: Right
-DerivePointerAlignment: true
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
 
 # Existing code intentionally keeps compact guards and small functions inline.
 AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: All
+AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLambdasOnASingleLine: None
 AllowShortLoopsOnASingleLine: true
 
 # Preserve hand-grouped dependencies and avoid wrapping existing long SQL/log
 # expressions solely because they cross an arbitrary width.
 SortIncludes: Never
-ColumnLimit: 0
+ColumnLimit: 120
 
 # Preserve local alignment without creating broad new alignment groups.
-AlignConsecutiveAssignments: None
-AlignConsecutiveDeclarations: None
-AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignAfterOpenBracket: BlockIndent
 AlignOperands: DontAlign
 AlignTrailingComments: true
 
-BinPackArguments: true
-BinPackParameters: true
+BinPackArguments: false
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: false
 Cpp11BracedListStyle: true
-IndentCaseLabels: false
+IndentCaseLabels: true
 IndentPPDirectives: None
 KeepEmptyLinesAtTheStartOfBlocks: true
 MaxEmptyLinesToKeep: 3
