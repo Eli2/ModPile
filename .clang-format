@@ -1,0 +1,49 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# The project predominantly uses tabs, with a visual width of four columns.
+UseTab: ForIndentation
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+
+BreakBeforeBraces: Attach
+SpaceBeforeParens: Never
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: false
+PointerAlignment: Right
+ReferenceAlignment: Right
+DerivePointerAlignment: false
+
+# Existing code intentionally keeps compact guards and small functions inline.
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+
+# Preserve hand-grouped dependencies and avoid wrapping existing long SQL/log
+# expressions solely because they cross an arbitrary width.
+SortIncludes: Never
+ColumnLimit: 0
+
+# Preserve local alignment without creating broad new alignment groups.
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: Align
+AlignTrailingComments: true
+
+BinPackArguments: true
+BinPackParameters: true
+Cpp11BracedListStyle: true
+IndentCaseLabels: true
+IndentPPDirectives: None
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 3
+NamespaceIndentation: None
+AccessModifierOffset: -4
+EmptyLineBeforeAccessModifier: Never
+ReflowComments: false
+...
