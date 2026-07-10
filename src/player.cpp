@@ -74,8 +74,7 @@ bool player_init(AppState &app) {
 
 
 
-	g_playThread = std::thread([&]()->void{
-	thread_exception_guard("Player", [&](){
+	g_playThread = thread_create("Player", [&]()->void{
 		std::mt19937 rng(std::random_device{}());
 
 		SQLITE_CLOSE sqlite3* db = db_open(app);
@@ -901,8 +900,6 @@ bool player_init(AppState &app) {
 			}
 		}
 	});
-	});
-	thread_set_name(g_playThread, "Player");
 	
 	return true;
 }

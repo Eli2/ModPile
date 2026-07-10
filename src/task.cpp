@@ -190,8 +190,7 @@ static std::string task_name(const Tasks &task) {
 
 void task_init(AppState &app) {
 	
-	g_taskThread = std::thread([&](){
-	thread_exception_guard("db_task", [&](){
+	g_taskThread = thread_create("db_task", [&](){
 		SQLITE_CLOSE sqlite3* db = db_open(app);
 		if(!db) {
 			log_error("Failed to open task DB connection");
@@ -270,8 +269,6 @@ void task_init(AppState &app) {
 			}
 		}
 	});
-	});
-	thread_set_name(g_taskThread, "db_task");
 }
 
 void task_quit(AppState &app) {

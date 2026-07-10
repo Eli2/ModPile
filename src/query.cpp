@@ -156,8 +156,7 @@ void db_query_init(AppState &app) {
 	}, nullptr);
 	
 	try {
-	g_queryThread = std::thread([](){
-	thread_exception_guard("Query", [](){
+	g_queryThread = thread_create("Query", [](){
 		while(true) {
 			Query q;
 			{
@@ -192,8 +191,6 @@ void db_query_init(AppState &app) {
 			}
 		}
 	});
-	});
-	thread_set_name(g_queryThread, "Query");
 	} catch(const std::exception& e) {
 		log_error("Failed to create query thread: {}", e.what());
 		sqlite3_close(g_queryConnection);
