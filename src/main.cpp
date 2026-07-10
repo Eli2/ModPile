@@ -286,13 +286,12 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 void SDL_AppQuit(void *appstate, SDL_AppResult result) {
 	AppState& app = *static_cast<AppState*>(appstate);
 
-	curl_util_quit();
-
 	if(!app.setup.active) {
 		app_full_quit(app);
 	}
 	gui_quit(app);
 
+	curl_util_quit();
 
 	SDL_GetWindowSize(
 		app.window,
