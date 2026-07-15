@@ -100,10 +100,9 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, b
 
 bool db_migrate(sqlite3 *db) {
 	// Bootstrap: ensure the tracking table exists (outside any migration transaction)
-	char *errmsg = nullptr;
+	SQLITE_FREE char *errmsg = nullptr;
 	if(sqlite3_exec(db, kCreateMigrationTable, nullptr, nullptr, &errmsg) != SQLITE_OK) {
 		log_error("Failed to create schema_migration table: {}", errmsg);
-		sqlite3_free(errmsg);
 		return false;
 	}
 
@@ -122,13 +121,12 @@ bool db_migrate(sqlite3 *db) {
 		}
 
 		const int64_t t0 = now_ms();
-		errmsg = nullptr;
-		const int rc = sqlite3_exec(db, m.sql, nullptr, nullptr, &errmsg);
+		SQLITE_FREE char *migration_errmsg = nullptr;
+		const int rc = sqlite3_exec(db, m.sql, nullptr, nullptr, &migration_errmsg);
 		const int64_t elapsed = now_ms() - t0;
 
 		if(rc != SQLITE_OK) {
-			log_error("Migration V{} failed: {}", m.version, errmsg ? errmsg : "unknown");
-			sqlite3_free(errmsg);
+			log_error("Migration V{} failed: {}", m.version, migration_errmsg ? migration_errmsg : "unknown");
 			transaction.rollback();
 			if(!record_migration(db, m, elapsed, false)) {
 				log_error("Failed to record failed migration V{}", m.version);
