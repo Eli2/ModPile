@@ -74,11 +74,6 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, b
 	const char *sql = R"(
 		INSERT INTO schema_migration(version, description, installed_on, execution_ms, success)
 		VALUES(?1, ?2, ?3, ?4, ?5)
-		ON CONFLICT(version) DO UPDATE SET
-			description  = excluded.description,
-			installed_on = excluded.installed_on,
-			execution_ms = excluded.execution_ms,
-			success      = excluded.success
 	)";
 	sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
