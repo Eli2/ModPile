@@ -277,6 +277,8 @@ add_executable(ModPile
 	src/util/timer_util.h
 	src/util/xmp_util.h
 	src/util/xmp_util.cpp
+	src/util/xml_util.h
+	src/util/xml_util.cpp
 	src/util/toml.h
 	src/util/toml.cpp
 
@@ -418,6 +420,8 @@ add_executable(ModPileTest
 	src/util/str_util.cpp
 	src/util/sqlite_util.h
 	src/util/sqlite_util.cpp
+	src/util/xml_util.h
+	src/util/xml_util.cpp
 	src/log.h
 	src/log.cpp
 	src/db/schema/schema.h
@@ -427,6 +431,7 @@ add_executable(ModPileTest
 	test/test_hash_util.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
+	test/test_xml_util.cpp
 )
 target_compile_features(ModPileTest PRIVATE
 	cxx_std_20
