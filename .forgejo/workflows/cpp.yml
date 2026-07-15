@@ -9,7 +9,7 @@ jobs:
   build-ubuntu:
     runs-on: codeberg-medium
     container:
-      image: ubuntu:25.10
+      image: ubuntu:latest
     steps:
     - name: prepare
       run: |
