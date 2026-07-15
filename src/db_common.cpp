@@ -136,6 +136,12 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 	
 	log_debug("Adding file comp={:.2f}: {}", compression, meta.file_name);
 	
+	SqliteTransaction transaction(db);
+	if(!transaction.active()) {
+		log_error("BEGIN failed: {}", sqlite3_errmsg(db));
+		return;
+	}
+
 	{
 		auto sql = R"(
 			INSERT INTO file(id, name, size, data)
@@ -201,6 +207,10 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 			log_error("step failed: {}", sqlite3_errmsg(db));
 			return;
 		}
+	}
+
+	if(!transaction.commit()) {
+		log_error("COMMIT failed: {}", sqlite3_errmsg(db));
 	}
 }
 

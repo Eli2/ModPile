@@ -77,3 +77,32 @@ bool sqliteu_commit(sqlite3 *db) {
 void sqliteu_rollback(sqlite3 *db) {
 	sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
 }
+
+SqliteTransaction::SqliteTransaction(sqlite3 *db)
+	: db(db),
+	  transaction_active(sqliteu_begin(db))
+{
+}
+
+SqliteTransaction::~SqliteTransaction() {
+	rollback();
+}
+
+bool SqliteTransaction::active() const {
+	return transaction_active;
+}
+
+bool SqliteTransaction::commit() {
+	if(!transaction_active) {
+		return false;
+	}
+	transaction_active = false;
+	return sqliteu_commit(db);
+}
+
+void SqliteTransaction::rollback() {
+	if(transaction_active) {
+		sqliteu_rollback(db);
+		transaction_active = false;
+	}
+}

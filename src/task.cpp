@@ -41,7 +41,8 @@ struct UpdateFulltextSearchIndex {
 		log_debug("Updating fulltext index ...");
 		Timer timer;
 		
-		if(!sqliteu_begin(db)) {
+		SqliteTransaction transaction(db);
+		if(!transaction.active()) {
 			log_error("BEGIN failed: {}", sqlite3_errmsg(db));
 			return;
 		}
@@ -66,10 +67,9 @@ struct UpdateFulltextSearchIndex {
 			;
 		)";
 		if(!exec(db, sql)) {
-			sqliteu_rollback(db);
 			return;
 		}
-		if(!sqliteu_commit(db)) {
+		if(!transaction.commit()) {
 			log_error("COMMIT failed: {}", sqlite3_errmsg(db));
 		}
 

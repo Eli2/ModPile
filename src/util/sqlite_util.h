@@ -32,11 +32,26 @@ bool sqliteu_begin(sqlite3 *db);
 bool sqliteu_commit(sqlite3 *db);
 void sqliteu_rollback(sqlite3 *db);
 
+class SqliteTransaction {
+	sqlite3 *db = nullptr;
+	bool transaction_active = false;
+
+public:
+	explicit SqliteTransaction(sqlite3 *db);
+	~SqliteTransaction();
+
+	SqliteTransaction(const SqliteTransaction&) = delete;
+	SqliteTransaction& operator=(const SqliteTransaction&) = delete;
+
+	bool active() const;
+	bool commit();
+	void rollback();
+};
+
 
 inline constexpr int sqlite_base_err(int e) {
 	return (e & 255);
 }
 
 static_assert(SQLITE_BUSY == sqlite_base_err(SQLITE_BUSY_SNAPSHOT));
-
 
