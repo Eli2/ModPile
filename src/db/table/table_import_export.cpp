@@ -7,6 +7,7 @@
 #include <istream>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "../../log.h"
@@ -114,6 +115,21 @@ static std::string unescape_field(std::string_view field) {
 	return unescaped;
 }
 
+static std::vector<std::string> split_fields(std::string_view line) {
+	std::vector<std::string> fields;
+	size_t pos = 0;
+	while(true) {
+		auto next = line.find('\t', pos);
+		if(next == std::string_view::npos) {
+			fields.emplace_back(line.substr(pos));
+			break;
+		}
+		fields.emplace_back(line.substr(pos, next - pos));
+		pos = next + 1;
+	}
+	return fields;
+}
+
 static void unescape_fields(std::vector<std::string> &row) {
 	for(auto &field : row) {
 		field = unescape_field(field);
@@ -189,8 +205,11 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		for(int i = 0; i < ncols; i++) {
 			if(i > 0) out << '\t';
-			const char *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-			if(val) out << escape_field(val);
+			const auto *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+			if(val) {
+				const auto nbytes = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
+				out << escape_field(std::string_view(val, nbytes));
+			}
 		}
 		out << '\n';
 	}
@@ -221,14 +240,17 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 	std::vector<std::string> header;
 	std::vector<size_t> ignoredColumns;
 	while(std::getline(in, line)) {
+		if(!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
 		lineIdx++;
 		if(lineIdx == 0) {
-			header = str_split(line, "\t");
+			header = split_fields(line);
 			ignoredColumns = remove_non_insertable_columns(header, insertableColumns);
 			continue;
 		}
 
-		auto rowVec = str_split(line, "\t");
+		auto rowVec = split_fields(line);
 		remove_columns(rowVec, ignoredColumns);
 		unescape_fields(rowVec);
 		if(header.size() != rowVec.size()) {
