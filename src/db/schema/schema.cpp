@@ -9,6 +9,7 @@
 #include <sqlite3.h>
 
 #include "../../log.h"
+#include "../../util/sqlite_util.h"
 
 // ---------------------------------------------------------------------------
 // Migration table bootstrap
@@ -57,6 +58,7 @@ static int current_version(sqlite3 *db) {
 	const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migration WHERE success = 1";
 	sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("schema_migration version prepare failed: {}", sqlite3_errmsg(db));
 		return 0;
 	}
 	
@@ -72,6 +74,11 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, b
 	const char *sql = R"(
 		INSERT INTO schema_migration(version, description, installed_on, execution_ms, success)
 		VALUES(?1, ?2, ?3, ?4, ?5)
+		ON CONFLICT(version) DO UPDATE SET
+			description  = excluded.description,
+			installed_on = excluded.installed_on,
+			execution_ms = excluded.execution_ms,
+			success      = excluded.success
 	)";
 	sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -84,6 +91,9 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, b
 	sqlite3_bind_int64(stmt, 4, exec_ms);
 	sqlite3_bind_int (stmt, 5, success ? 1 : 0);
 	bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+	if(!ok) {
+		log_error("schema_migration record step failed: {}", sqlite3_errmsg(db));
+	}
 	sqlite3_finalize(stmt);
 	return ok;
 }
@@ -105,7 +115,11 @@ bool db_migrate(sqlite3 *db) {
 
 		log_info("Applying migration V{}: {}", m.version, m.description);
 
-		sqlite3_exec(db, "BEGIN", nullptr, nullptr, nullptr);
+		SqliteTransaction transaction(db);
+		if(!transaction.active()) {
+			log_error("Migration V{} failed to begin transaction: {}", m.version, sqlite3_errmsg(db));
+			return false;
+		}
 
 		const int64_t t0 = now_ms();
 		errmsg = nullptr;
@@ -115,13 +129,20 @@ bool db_migrate(sqlite3 *db) {
 		if(rc != SQLITE_OK) {
 			log_error("Migration V{} failed: {}", m.version, errmsg ? errmsg : "unknown");
 			sqlite3_free(errmsg);
-			record_migration(db, m, elapsed, false);
-			sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
+			transaction.rollback();
+			if(!record_migration(db, m, elapsed, false)) {
+				log_error("Failed to record failed migration V{}", m.version);
+			}
 			return false;
 		}
 
-		record_migration(db, m, elapsed, true);
-		sqlite3_exec(db, "COMMIT", nullptr, nullptr, nullptr);
+		if(!record_migration(db, m, elapsed, true)) {
+			return false;
+		}
+		if(!transaction.commit()) {
+			log_error("Migration V{} failed to commit: {}", m.version, sqlite3_errmsg(db));
+			return false;
+		}
 
 		log_info("Migration V{} applied in {} ms", m.version, elapsed);
 	}

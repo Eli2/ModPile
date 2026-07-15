@@ -416,6 +416,8 @@ add_executable(ModPileTest
 	${hash_util_srcs}
 	src/util/str_util.h
 	src/util/str_util.cpp
+	src/util/sqlite_util.h
+	src/util/sqlite_util.cpp
 	src/log.h
 	src/log.cpp
 	src/db/schema/schema.h
