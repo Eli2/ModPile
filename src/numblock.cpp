@@ -197,6 +197,11 @@ void numblock_init(AppState &app) {
 				lastState = keyState;
 			}
 		}
+
+		if(g_hidDevice) {
+			SDL_hid_close(g_hidDevice);
+			g_hidDevice = nullptr;
+		}
 		
 		SDL_CleanupTLS();
 	});
@@ -205,9 +210,6 @@ void numblock_init(AppState &app) {
 void numblock_quit() {
 	g_numblockThreadRunning = false;
 	g_numblockThreadCv.notify_all();
-	if(g_hidDevice) {
-		SDL_hid_close(g_hidDevice);
-	}
 	if(g_numblockThread.joinable())
 		g_numblockThread.join();
 	SDL_hid_exit();
