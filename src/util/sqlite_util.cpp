@@ -56,6 +56,7 @@ std::optional<double> sqlite_util_column_double(sqlite3_stmt *stmt, int colIdx) 
 	default:
 	case SQLITE_NULL:
 		return std::nullopt;
+	case SQLITE_INTEGER:
 	case SQLITE_FLOAT:
 		return sqlite3_column_double(stmt, colIdx);
 	}
