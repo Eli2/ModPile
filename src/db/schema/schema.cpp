@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <format>
+#include <optional>
 #include <string>
 
 #include <sqlite3.h>
@@ -55,17 +56,22 @@ static int64_t now_ms() {
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-static int current_version(sqlite3 *db) {
+static std::optional<int> current_version(sqlite3 *db) {
 	const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migration WHERE success = 1";
 	sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		log_error("schema_migration version prepare failed: {}", sqlite3_errmsg(db));
-		return 0;
+		return std::nullopt;
 	}
 	
 	int v = 0;
-	if(sqlite3_step(stmt) == SQLITE_ROW) {
+	auto step = sqlite3_step(stmt);
+	if(step == SQLITE_ROW) {
 		v = sqlite3_column_int(stmt, 0);
+	} else if(step != SQLITE_DONE) {
+		log_error("schema_migration version step failed: {}", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return std::nullopt;
 	}
 	sqlite3_finalize(stmt);
 	return v;
@@ -102,10 +108,13 @@ bool db_migrate(sqlite3 *db) {
 		return false;
 	}
 
-	const int version = current_version(db);
+	const auto version = current_version(db);
+	if(!version.has_value()) {
+		return false;
+	}
 
 	for(const auto &m : kMigrations) {
-		if(m.version <= version)
+		if(m.version <= version.value())
 			continue;
 
 		log_info("Applying migration V{}: {}", m.version, m.description);

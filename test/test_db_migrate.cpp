@@ -182,3 +182,25 @@ TEST_CASE("db_migrate fixes integer division in existing V1 play table", "[db][m
 
 	sqlite3_close(db);
 }
+
+TEST_CASE("db_migrate aborts when schema_migration version cannot be read", "[db][migration]") {
+	sqlite3 *db = open_memory_db();
+
+	REQUIRE(sqlite3_exec(db, R"(
+		CREATE TABLE schema_migration (
+			broken INTEGER NOT NULL
+		)
+	)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	CHECK(db_migrate(db) == false);
+
+	sqlite3_stmt *stmt = nullptr;
+	sqlite3_prepare_v2(db,
+		"SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'file'",
+		-1, &stmt, nullptr);
+	REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+	CHECK(sqlite3_column_int(stmt, 0) == 0);
+	sqlite3_finalize(stmt);
+
+	sqlite3_close(db);
+}
