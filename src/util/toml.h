@@ -3,14 +3,15 @@
 #pragma once
 
 #include <filesystem>
+#include <iosfwd>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
-// Minimal TOML subset: flat key/value pairs grouped into [sections].
-// Supported value types: string, integer, float, bool.
+// Minimal TOML subset: flat bare key/value pairs grouped into [sections].
+// Supported values: basic strings, decimal/hex integers, decimal floats, bools.
 // Write order is explicit (caller-controlled); read tolerates any order.
 
 struct TomlValue {
@@ -24,7 +25,8 @@ struct TomlValue {
 
 class TomlReader {
 public:
-	// Parse a TOML file. Returns false on I/O error; syntax errors are skipped.
+	// Parse TOML. Returns false on I/O error; syntax errors are skipped.
+	bool load(std::istream &input);
 	bool load(const std::filesystem::path &path);
 
 	std::optional<std::string> get_string (std::string_view section, std::string_view key) const;
@@ -41,6 +43,10 @@ private:
 
 class TomlWriter {
 public:
+	// Load an existing document so writes preserve its layout and unknown content.
+	bool load(std::istream &input);
+	bool load(const std::filesystem::path &path);
+
 	// Section/key write methods — output order matches call order.
 	void section(std::string_view name);
 	void write(std::string_view key, std::string_view   value);
@@ -49,10 +55,13 @@ public:
 	void write(std::string_view key, double             value);
 	void write(std::string_view key, bool               value);
 
-	// Serialise to file. Returns false on error.
+	// Serialise to a stream or file. Returns false on error.
+	bool save(std::ostream &output) const;
 	bool save(const std::filesystem::path &path) const;
 
 private:
 	std::string m_buf;
-	bool        m_first_section = true;
+	std::string m_section;
+
+	void write_value(std::string_view key, std::string value);
 };
