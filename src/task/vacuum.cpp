@@ -6,6 +6,7 @@
 #include <sqlite3.h>
 
 #include "../log.h"
+#include "../util/sqlite_util.h"
 
 namespace {
 
@@ -33,7 +34,7 @@ void vacuum_run(TaskControl &tc, sqlite3 *db, std::filesystem::path path) {
 	sqlite3_progress_handler(db, 1000, vacuum_progress_handler, &progress);
 
 	auto sql = std::format("VACUUM INTO '{}'", escaped);
-	char *errmsg = nullptr;
+	SQLITE_FREE char *errmsg = nullptr;
 	int   rc     = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errmsg);
 
 	sqlite3_progress_handler(db, 0, nullptr, nullptr);
@@ -45,7 +46,6 @@ void vacuum_run(TaskControl &tc, sqlite3 *db, std::filesystem::path path) {
 	if(rc != SQLITE_OK) {
 		log_error("VACUUM INTO failed: {}", errmsg ? errmsg : "unknown");
 		tc.statusline.set("Failed");
-		sqlite3_free(errmsg);
 		return;
 	}
 
