@@ -57,7 +57,7 @@ struct ModlandRow {
 	std::string path;
 };
 
-static void add_modland_path(sqlite3* db, const ModlandRow &row) {
+static bool add_modland_path(sqlite3* db, const ModlandRow &row) {
 	
 	auto sql = R"(
 		INSERT OR REPLACE INTO
@@ -70,7 +70,7 @@ static void add_modland_path(sqlite3* db, const ModlandRow &row) {
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(db));
-		return;
+		return false;
 	}
 	
 	sqliteu_bind_string(stmt, 1, row.md5);
@@ -82,11 +82,12 @@ static void add_modland_path(sqlite3* db, const ModlandRow &row) {
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
-		return;
+		return false;
 	}
+	return true;
 }
 
-static void deleteOldModlandData(sqlite3* db) {
+static bool deleteOldModlandData(sqlite3* db) {
 	
 	auto sql = R"(
 		DELETE FROM
@@ -98,14 +99,20 @@ static void deleteOldModlandData(sqlite3* db) {
 	int rc = sqlite3_exec(db, sql, nullptr, nullptr, &msg);
 	if(rc != SQLITE_OK){
 		log_error("SQL error: {} -> {}", sql, msg);
+		return false;
 	}
+	return true;
 }
 
-static void parseFile(sqlite3* db, std::vector<char> &allData) {
+static bool parseFile(sqlite3* db, std::vector<char> &allData) {
 	log_debug("Parsing file");
 	std::string_view sv = std::string_view(allData.begin(), allData.end());
+	bool ok = true;
 	
 	split(sv, "\n", [&](std::string_view line) {
+		if(!ok)
+			return;
+
 		auto [md5, path] = split_first(line, ' ');
 		if(md5.empty() || path.empty())
 			return;
@@ -139,8 +146,9 @@ static void parseFile(sqlite3* db, std::vector<char> &allData) {
 			return;
 		}
 		
-		add_modland_path(db, row);
+		ok = add_modland_path(db, row);
 	});
+	return ok;
 }
 
 static void readArchive(sqlite3* db, const std::span<std::byte> data) {
@@ -201,8 +209,12 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 				break;
 			}
 
-			deleteOldModlandData(db);
-			parseFile(db, allData);
+			if(!deleteOldModlandData(db)) {
+				break;
+			}
+			if(!parseFile(db, allData)) {
+				break;
+			}
 
 			{
 				auto sql = R"(
