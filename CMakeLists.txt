@@ -432,6 +432,7 @@ add_executable(ModPileTest
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
 	test/test_playstats_import_export.cpp
+	test/test_table_import_export.cpp
 	test/test_xml_util.cpp
 )
 target_compile_features(ModPileTest PRIVATE

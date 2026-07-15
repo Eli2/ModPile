@@ -73,6 +73,53 @@ static bool insert_row(
 	return true;
 }
 
+static std::string escape_field(std::string_view field) {
+	std::string escaped;
+	escaped.reserve(field.size());
+	for(char c : field) {
+		switch(c) {
+		case '\\': escaped += "\\\\"; break;
+		case '\r': escaped += "\\r";  break;
+		case '\n': escaped += "\\n";  break;
+		case '\t': escaped += "\\t";  break;
+		default:
+			escaped += c;
+			break;
+		}
+	}
+	return escaped;
+}
+
+static std::string unescape_field(std::string_view field) {
+	std::string unescaped;
+	unescaped.reserve(field.size());
+	for(size_t i = 0; i < field.size(); i++) {
+		if(field[i] != '\\' || i + 1 >= field.size()) {
+			unescaped += field[i];
+			continue;
+		}
+
+		i++;
+		switch(field[i]) {
+		case '\\': unescaped += '\\'; break;
+		case 'r':  unescaped += '\r'; break;
+		case 'n':  unescaped += '\n'; break;
+		case 't':  unescaped += '\t'; break;
+		default:
+			unescaped += '\\';
+			unescaped += field[i];
+			break;
+		}
+	}
+	return unescaped;
+}
+
+static void unescape_fields(std::vector<std::string> &row) {
+	for(auto &field : row) {
+		field = unescape_field(field);
+	}
+}
+
 static std::vector<std::string> insertable_columns(sqlite3 *db, const std::string &table) {
 	auto sql = std::format("PRAGMA table_xinfo({})", quote_identifier(table));
 
@@ -143,7 +190,7 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 		for(int i = 0; i < ncols; i++) {
 			if(i > 0) out << '\t';
 			const char *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-			if(val) out << val;
+			if(val) out << escape_field(val);
 		}
 		out << '\n';
 	}
@@ -183,6 +230,7 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 
 		auto rowVec = str_split(line, "\t");
 		remove_columns(rowVec, ignoredColumns);
+		unescape_fields(rowVec);
 		if(header.size() != rowVec.size()) {
 			log_debug("Column count mismatch in file");
 			continue;
