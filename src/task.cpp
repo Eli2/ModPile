@@ -25,12 +25,14 @@ class Poison {
 	
 };
 
-static void exec(sqlite3* db, const char* sql) {
+static bool exec(sqlite3* db, const char* sql) {
 	SQLITE_FREE char *msg = nullptr;
 	int rc = sqlite3_exec(db, sql, 0, 0, &msg);
 	if(rc != SQLITE_OK){
-		log_error("SQL error: {} -> {}", sql, msg);
+		log_error("SQL error: {} -> {}", sql, msg ? msg : sqlite3_errmsg(db));
+		return false;
 	}
+	return true;
 }
 
 struct UpdateFulltextSearchIndex {
@@ -63,7 +65,10 @@ struct UpdateFulltextSearchIndex {
 				ON modland.md5 == meta.md5
 			;
 		)";
-		exec(db, sql);
+		if(!exec(db, sql)) {
+			sqliteu_rollback(db);
+			return;
+		}
 		if(!sqliteu_commit(db)) {
 			log_error("COMMIT failed: {}", sqlite3_errmsg(db));
 		}
