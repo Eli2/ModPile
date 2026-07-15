@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <sqlite3.h>
 
-#include "global.h"
+struct AppState;
 
 sqlite3* db_open(const AppState &app);
 bool db_init(AppState &app);

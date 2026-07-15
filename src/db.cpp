@@ -4,14 +4,16 @@
 
 
 #include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <format>
 #include <optional>
 #include <string>
 
-#include <SDL3/SDL.h>
 #include <sqlite3.h>
-#include <zstd.h>
 
 #include "db/schema/schema.h"
+#include "global.h"
 #include "util/sqlite_util.h"
 #include "log.h"
 

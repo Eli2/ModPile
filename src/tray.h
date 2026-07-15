@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #pragma once
 
-#include "global.h"
+struct AppState;
 
 void tray_init(AppState &app);
 void tray_iterate(AppState &app);

@@ -14,6 +14,7 @@
 #include "charts.h"
 #include "visualizer.h"
 #include "db_common.h"
+#include "global.h"
 #include "log.h"
 #include "db.h"
 #include "mpris.h"

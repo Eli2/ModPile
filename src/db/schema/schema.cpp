@@ -3,9 +3,8 @@
 #include "schema.h"
 
 #include <chrono>
-#include <format>
+#include <cstdint>
 #include <optional>
-#include <string>
 
 #include <sqlite3.h>
 

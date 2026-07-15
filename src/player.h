@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #pragma once
 
-#include "global.h"
+struct AppState;
 
 bool player_init(AppState &app);
 bool player_iterate(AppState &app);
