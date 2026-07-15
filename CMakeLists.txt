@@ -238,6 +238,8 @@ add_executable(ModPile
 	src/db/schema/schema.h
 	src/db/schema/V001_Initial_schema.cpp
 	src/db/schema/V002_Fix_rating_division.cpp
+	src/db/table/table_import_export.h
+	src/db/table/table_import_export.cpp
 	src/task/analyze.cpp
 	src/task/analyze.h
 	src/task/check.cpp
@@ -421,6 +423,8 @@ add_executable(ModPileTest
 	src/db/schema/schema.cpp
 	src/db/schema/V001_Initial_schema.cpp
 	src/db/schema/V002_Fix_rating_division.cpp
+	src/db/table/table_import_export.h
+	src/db/table/table_import_export.cpp
 	src/task/import.h
 	src/task/import.cpp
 
