@@ -115,7 +115,8 @@ void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path 
 		return;
 	}
 
-	if(!sqliteu_begin(db)) {
+	SqliteTransaction transaction(db);
+	if(!transaction.active()) {
 		log_error("BEGIN failed: {}", sqlite3_errmsg(db));
 		return;
 	}
@@ -139,7 +140,7 @@ void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path 
 		insert_row(db, "play", header, rowVec);
 	}
 
-	if(!sqliteu_commit(db)) {
+	if(!transaction.commit()) {
 		log_error("COMMIT failed: {}", sqlite3_errmsg(db));
 	}
 	log_debug("DONE");

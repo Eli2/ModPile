@@ -195,7 +195,8 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 		}
 		
 		if(readOk){
-			if(!sqliteu_begin(db)) {
+			SqliteTransaction transaction(db);
+			if(!transaction.active()) {
 				log_error("BEGIN failed: {}", sqlite3_errmsg(db));
 				break;
 			}
@@ -213,10 +214,11 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 				int rc = sqlite3_exec(db, sql, nullptr, nullptr, &msg);
 				if(rc != SQLITE_OK){
 					log_error("SQL error cleaning modland_format: {}", msg);
+					break;
 				}
 			}
 
-			if(!sqliteu_commit(db)) {
+			if(!transaction.commit()) {
 				log_error("COMMIT failed: {}", sqlite3_errmsg(db));
 			}
 		}

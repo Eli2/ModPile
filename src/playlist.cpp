@@ -248,14 +248,14 @@ static std::optional<int64_t> next_track_order(int64_t playlist_id) {
 }
 
 static void add_track(const AppState::Playlist::Request::AddTrack &req) {
-	if(!sqliteu_begin(g_playlistConnection)) {
+	SqliteTransaction transaction(g_playlistConnection);
+	if(!transaction.active()) {
 		log_error("BEGIN failed: {}", sqlite3_errmsg(g_playlistConnection));
 		return;
 	}
 
 	auto order = next_track_order(req.playlist_id);
 	if(!order.has_value()) {
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
@@ -269,7 +269,6 @@ static void add_track(const AppState::Playlist::Request::AddTrack &req) {
 	int rc = sqlite3_prepare_v2(g_playlistConnection, sql, -1, &stmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
@@ -280,17 +279,17 @@ static void add_track(const AppState::Playlist::Request::AddTrack &req) {
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
-	if(!sqliteu_commit(g_playlistConnection)) {
+	if(!transaction.commit()) {
 		log_error("COMMIT failed: {}", sqlite3_errmsg(g_playlistConnection));
 	}
 }
 
 static void remove_track(const AppState::Playlist::Request::RemoveTrack &req) {
-	if(!sqliteu_begin(g_playlistConnection)) {
+	SqliteTransaction transaction(g_playlistConnection);
+	if(!transaction.active()) {
 		log_error("BEGIN failed: {}", sqlite3_errmsg(g_playlistConnection));
 		return;
 	}
@@ -305,7 +304,6 @@ static void remove_track(const AppState::Playlist::Request::RemoveTrack &req) {
 	int rc = sqlite3_prepare_v2(g_playlistConnection, sql, -1, &stmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
@@ -313,7 +311,6 @@ static void remove_track(const AppState::Playlist::Request::RemoveTrack &req) {
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
@@ -327,7 +324,6 @@ static void remove_track(const AppState::Playlist::Request::RemoveTrack &req) {
 	rc = sqlite3_prepare_v2(g_playlistConnection, shiftSql, -1, &shiftStmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 	sqlite3_bind_int64(shiftStmt, 1, req.playlist_id);
@@ -335,11 +331,10 @@ static void remove_track(const AppState::Playlist::Request::RemoveTrack &req) {
 	rc = sqlite3_step(shiftStmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-		sqliteu_rollback(g_playlistConnection);
 		return;
 	}
 
-	if(!sqliteu_commit(g_playlistConnection)) {
+	if(!transaction.commit()) {
 		log_error("COMMIT failed: {}", sqlite3_errmsg(g_playlistConnection));
 	}
 }
@@ -371,11 +366,11 @@ static void move_track(const AppState::Playlist::Request::MoveTrack &req) {
 		return;
 	}
 	
-	if(!sqliteu_begin(g_playlistConnection)) {
+	SqliteTransaction transaction(g_playlistConnection);
+	if(!transaction.active()) {
 		log_error("BEGIN failed: {}", sqlite3_errmsg(g_playlistConnection));
 		return;
 	}
-	bool ok = true;
 	
 	if(req.to_order < req.from_order) {
 		auto shiftSql = R"(
@@ -390,17 +385,15 @@ static void move_track(const AppState::Playlist::Request::MoveTrack &req) {
 		int rc = sqlite3_prepare_v2(g_playlistConnection, shiftSql, -1, &shiftStmt, nullptr);
 		if (rc != SQLITE_OK) {
 			log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-			ok = false;
+			return;
 		}
-		if(ok) {
-			sqlite3_bind_int64(shiftStmt, 1, req.playlist_id);
-			sqlite3_bind_int64(shiftStmt, 2, req.to_order);
-			sqlite3_bind_int64(shiftStmt, 3, req.from_order);
-			rc = sqlite3_step(shiftStmt);
-			if (rc != SQLITE_DONE) {
-				log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-				ok = false;
-			}
+		sqlite3_bind_int64(shiftStmt, 1, req.playlist_id);
+		sqlite3_bind_int64(shiftStmt, 2, req.to_order);
+		sqlite3_bind_int64(shiftStmt, 3, req.from_order);
+		rc = sqlite3_step(shiftStmt);
+		if (rc != SQLITE_DONE) {
+			log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
+			return;
 		}
 	} else {
 		auto shiftSql = R"(
@@ -415,50 +408,40 @@ static void move_track(const AppState::Playlist::Request::MoveTrack &req) {
 		int rc = sqlite3_prepare_v2(g_playlistConnection, shiftSql, -1, &shiftStmt, nullptr);
 		if (rc != SQLITE_OK) {
 			log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-			ok = false;
+			return;
 		}
-		if(ok) {
-			sqlite3_bind_int64(shiftStmt, 1, req.playlist_id);
-			sqlite3_bind_int64(shiftStmt, 2, req.to_order);
-			sqlite3_bind_int64(shiftStmt, 3, req.from_order);
-			rc = sqlite3_step(shiftStmt);
-			if (rc != SQLITE_DONE) {
-				log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-				ok = false;
-			}
+		sqlite3_bind_int64(shiftStmt, 1, req.playlist_id);
+		sqlite3_bind_int64(shiftStmt, 2, req.to_order);
+		sqlite3_bind_int64(shiftStmt, 3, req.from_order);
+		rc = sqlite3_step(shiftStmt);
+		if (rc != SQLITE_DONE) {
+			log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
+			return;
 		}
 	}
 
-	if(ok) {
-		auto moveSql = R"(
-			UPDATE playlist_track
-			SET track_order = ?2
-			WHERE id == ?1
-			;
-		)";
-		SQLITE_FINALIZE sqlite3_stmt *moveStmt = nullptr;
-		int rc = sqlite3_prepare_v2(g_playlistConnection, moveSql, -1, &moveStmt, nullptr);
-		if (rc != SQLITE_OK) {
-			log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
-			ok = false;
-		}
-		if(ok) {
-			sqlite3_bind_int64(moveStmt, 1, req.playlist_track_id);
-			sqlite3_bind_int64(moveStmt, 2, req.to_order);
-			rc = sqlite3_step(moveStmt);
-			if (rc != SQLITE_DONE) {
-				log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
-				ok = false;
-			}
-		}
+	auto moveSql = R"(
+		UPDATE playlist_track
+		SET track_order = ?2
+		WHERE id == ?1
+		;
+	)";
+	SQLITE_FINALIZE sqlite3_stmt *moveStmt = nullptr;
+	int rc = sqlite3_prepare_v2(g_playlistConnection, moveSql, -1, &moveStmt, nullptr);
+	if (rc != SQLITE_OK) {
+		log_error("prepare failed: {}", sqlite3_errmsg(g_playlistConnection));
+		return;
 	}
-	
-	if(ok) {
-		if(!sqliteu_commit(g_playlistConnection)) {
-			log_error("COMMIT failed: {}", sqlite3_errmsg(g_playlistConnection));
-		}
-	} else {
-		sqliteu_rollback(g_playlistConnection);
+	sqlite3_bind_int64(moveStmt, 1, req.playlist_track_id);
+	sqlite3_bind_int64(moveStmt, 2, req.to_order);
+	rc = sqlite3_step(moveStmt);
+	if (rc != SQLITE_DONE) {
+		log_error("step failed: {}", sqlite3_errmsg(g_playlistConnection));
+		return;
+	}
+
+	if(!transaction.commit()) {
+		log_error("COMMIT failed: {}", sqlite3_errmsg(g_playlistConnection));
 	}
 }
 
