@@ -70,7 +70,7 @@ static int current_version(sqlite3 *db) {
 	return v;
 }
 
-static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, bool success) {
+static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms) {
 	const char *sql = R"(
 		INSERT INTO schema_migration(version, description, installed_on, execution_ms, success)
 		VALUES(?1, ?2, ?3, ?4, ?5)
@@ -84,7 +84,7 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms, b
 	sqlite3_bind_text(stmt, 2, m.description, -1, SQLITE_STATIC);
 	sqlite3_bind_int64(stmt, 3, now_ms());
 	sqlite3_bind_int64(stmt, 4, exec_ms);
-	sqlite3_bind_int (stmt, 5, success ? 1 : 0);
+	sqlite3_bind_int (stmt, 5, 1);
 	bool ok = sqlite3_step(stmt) == SQLITE_DONE;
 	if(!ok) {
 		log_error("schema_migration record step failed: {}", sqlite3_errmsg(db));
@@ -123,13 +123,10 @@ bool db_migrate(sqlite3 *db) {
 		if(rc != SQLITE_OK) {
 			log_error("Migration V{} failed: {}", m.version, migration_errmsg ? migration_errmsg : "unknown");
 			transaction.rollback();
-			if(!record_migration(db, m, elapsed, false)) {
-				log_error("Failed to record failed migration V{}", m.version);
-			}
 			return false;
 		}
 
-		if(!record_migration(db, m, elapsed, true)) {
+		if(!record_migration(db, m, elapsed)) {
 			return false;
 		}
 		if(!transaction.commit()) {
