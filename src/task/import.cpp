@@ -9,7 +9,7 @@
 #include "util/str_util.h"
 
 
-static void insert_row(
+static bool insert_row(
 	sqlite3 *db,
 	std::string table,
 	std::vector<std::string> &header,
@@ -46,7 +46,7 @@ static void insert_row(
 	int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(db));
-		return;
+		return false;
 	}
 	
 	//sqlite3_bind_parameter_count(stmt);
@@ -55,15 +55,16 @@ static void insert_row(
 		int r = sqliteu_bind_string(stmt, i + 1, row[i]);
 		if(r != SQLITE_OK) {
 			log_error("bind failed: {}", sqlite3_errmsg(db));
-			return;
+			return false;
 		}
 	}
 	
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
-		return;
+		return false;
 	}
+	return true;
 }
 
 void export_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path) {
@@ -137,7 +138,10 @@ void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path 
 			continue;
 		}
 
-		insert_row(db, "play", header, rowVec);
+		if(!insert_row(db, "play", header, rowVec)) {
+			log_error("Failed to import row {}", lineIdx + 1);
+			return;
+		}
 	}
 
 	if(!transaction.commit()) {
