@@ -4,6 +4,7 @@
 
 
 #include <chrono>
+#include <optional>
 #include <string>
 
 #include <SDL3/SDL.h>
@@ -70,6 +71,28 @@ constexpr int32_t fourcc(char a, char b, char c, char d) {
 // See: https://www.sqlite.org/pragma.html#pragma_application_id
 static constexpr int32_t MODPILE_APPLICATION_ID = fourcc('M','P','L','E');
 
+static std::optional<bool> db_is_empty(sqlite3 *db) {
+	auto sql = R"(
+		SELECT COUNT(*)
+		FROM sqlite_schema
+		WHERE name NOT LIKE 'sqlite_%'
+		;
+	)";
+
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("Failed to inspect database schema: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	if(sqlite3_step(stmt) != SQLITE_ROW) {
+		log_error("Failed to inspect database schema: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	return sqlite3_column_int64(stmt, 0) == 0;
+}
+
 bool db_init(AppState &app) {
 
 	SQLITE_CLOSE sqlite3* db = db_open(app);
@@ -89,7 +112,18 @@ bool db_init(AppState &app) {
 		}
 
 		if(app_id == 0) {
-			// Fresh database — stamp it as ours
+			auto empty = db_is_empty(db);
+			if(!empty.has_value()) {
+				app.setup.error_message = "Could not inspect the selected database file.";
+				return false;
+			}
+			if(!empty.value()) {
+				log_error("Refusing to stamp database with unset application_id because it is not empty");
+				app.setup.error_message = "That database is not empty and is not marked as a ModPile database.";
+				return false;
+			}
+
+			// Fresh empty database — stamp it as ours.
 			auto sql = std::format("PRAGMA application_id = {}", MODPILE_APPLICATION_ID);
 			exec(db, sql.c_str());
 		} else if(app_id != MODPILE_APPLICATION_ID) {
