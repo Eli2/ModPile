@@ -85,7 +85,7 @@ else()
 		openal-soft
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/kcat/openal-soft
-		GIT_TAG        c41d64c6a35f6174bf4a27010aeac52a8d3bb2c6 # 1.25.1
+		GIT_TAG        b2c48f7718ef3fcf67921a8b6534c4914e328970 # 1.25.2
 	)
 
 	set(ALSOFT_EXAMPLES OFF)
@@ -119,13 +119,13 @@ else()
 		SDL3
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libsdl-org/SDL
-		GIT_TAG        683181b47cfabd293e3ea409f838915b8297a4fd # 3.4.2
+		GIT_TAG        f87239e71e42da91ca317a12eefb82cfbf3393eb # 3.4.12
 	)
 	FetchContent_Declare(
 		SDL3_image
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
-		GIT_TAG        ad58ecfc27a1bd09e510ceff8bbbdb1094806476 # 3.4.0
+		GIT_TAG        bec9134a26c7d0f31b36d6083c25296e04cabff5 # 3.4.4
 	)
 
 	set(SDL_SHARED OFF)
@@ -162,7 +162,7 @@ else()
 		libarchive
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libarchive/libarchive
-		GIT_TAG        dd897a78c662a2c7a003e7ec158cea7909557bee # 3.8.5
+		GIT_TAG        7219b0134d771dc4b51bf86b4d01761b87398b1b # 3.8.8
 	)
 
 	set(ENABLE_TEST OFF)
@@ -181,7 +181,7 @@ else()
 		libxmp
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/libxmp/libxmp
-		GIT_TAG        8a4fdf7d09aedc921de537853b59e1d15b534f24 # 4.7.0
+		GIT_TAG        12f76e4bf1dd6765e3bf46cbc1ff35c4a4551671 # 4.7.1
 	)
 	
 	set(BUILD_SHARED OFF)
@@ -401,7 +401,7 @@ else()
 		Catch2
 		GIT_SHALLOW    ON
 		GIT_REPOSITORY https://github.com/catchorg/Catch2
-		GIT_TAG        29c9844f688acb27c87338c39cd186ebfe41aa19 # v3.13.0
+		GIT_TAG        191fa38c9b1596cd2576ab531d4ab4d5e8e05190 # v3.15.2
 	)
 	FetchContent_MakeAvailable(Catch2)
 endif()
