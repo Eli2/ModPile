@@ -6,10 +6,12 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <string>
 #include <thread>
 
 #include <SDL3/SDL_hidapi.h>
 #include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_stdinc.h>
 #include "SDL3/SDL_thread.h"
 
 #include "util/str_util.h"
@@ -22,6 +24,16 @@ static std::thread g_numblockThread;
 static SDL_hid_device *g_hidDevice = nullptr;
 static std::condition_variable g_numblockThreadCv;
 static std::mutex g_numblockThreadMutex;
+
+static std::string sdl_wchar_to_utf8(const wchar_t *str) {
+	char *utf8 = SDL_iconv_wchar_utf8(str);
+	if(!utf8) {
+		return "";
+	}
+	std::string result(utf8);
+	SDL_free(utf8);
+	return result;
+}
 
 void numblock_init(AppState &app) {
 
@@ -86,8 +98,8 @@ void numblock_init(AppState &app) {
 			if(!manOk && !prodOk) {
 				log_debug(
 					"Opened hid device: {} : {}",
-					toUtf8(manStrBuf.data()),
-					toUtf8(prodStrBuf.data())
+					sdl_wchar_to_utf8(manStrBuf.data()),
+					sdl_wchar_to_utf8(prodStrBuf.data())
 				);
 			}
 			

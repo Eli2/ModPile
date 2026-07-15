@@ -28,8 +28,6 @@ std::string_view load_string(const std::array<char, N> &data) {
 
 bool is_empty_or_whitespace(const std::string_view &str);
 
-std::string toUtf8(const std::wstring& in);
-
 void trim(std::string &s);
 
 
@@ -63,4 +61,3 @@ template <typename Range>
 std::string str_join(const Range &range, std::string_view sep) {
 	return str_join(range, sep, [](const auto &s) -> const auto & { return s; });
 }
-

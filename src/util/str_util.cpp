@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <locale>
 #include <string>
 #include <vector>
 
@@ -15,36 +14,21 @@ std::string_view load_string(const char * data, size_t maxLength) {
 
 bool is_empty_or_whitespace(const std::string_view &str) {
 	return str.empty() || std::all_of(str.begin(), str.end(), [](char c) {
-		return std::isspace(c);
+		return std::isspace(static_cast<unsigned char>(c));
 	});
-}
-
-std::string toUtf8(const std::wstring& wide) {
-	const std::locale locale("");
-	const auto& facet = std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>(locale);
-	
-	std::mbstate_t state{};
-	std::string result(wide.size() * 4, '\0');
-	const wchar_t* from_next;
-	char* to_next;
-	
-	facet.out(state, wide.data(), wide.data() + wide.size(), from_next,
-			  result.data(), result.data() + result.size(), to_next);
-	result.resize(to_next - result.data());
-	return result;
 }
 
 // trim from start (in place)
 inline void ltrim(std::string &s) {
 	s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](char ch) {
-		return !std::isspace(ch);
+		return !std::isspace(static_cast<unsigned char>(ch));
 	}));
 }
 
 // trim from end (in place)
 inline void rtrim(std::string &s) {
 	s.erase(std::find_if(s.rbegin(), s.rend(), [](char ch) {
-		return !std::isspace(ch);
+		return !std::isspace(static_cast<unsigned char>(ch));
 	}).base(), s.end());
 }
 
@@ -69,4 +53,3 @@ std::pair<std::string_view, std::string_view> split_first(const std::string_view
 	auto value = in.substr(pos + 1);
 	return std::make_pair(key, value);
 }
-
