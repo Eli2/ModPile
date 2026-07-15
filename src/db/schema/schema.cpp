@@ -32,6 +32,7 @@ static const char *kCreateMigrationTable = R"(
 // ---------------------------------------------------------------------------
 
 extern const char* const V001_sql;
+extern const char* const V002_sql;
 
 struct Migration {
 	int         version;
@@ -41,8 +42,8 @@ struct Migration {
 
 static const Migration kMigrations[] = {
 	{ 1, "Initial schema", V001_sql },
+	{ 2, "Fix rating division", V002_sql },
 	// Add new migrations here:
-	// { 2, "Short description", V002_sql },
 };
 
 // ---------------------------------------------------------------------------

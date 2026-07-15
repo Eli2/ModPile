@@ -8,6 +8,8 @@
 
 #include "../src/db/schema/schema.h"
 
+extern const char* const V001_sql;
+
 static sqlite3* open_memory_db() {
 	sqlite3 *db = nullptr;
 	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
@@ -61,8 +63,8 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 
 	REQUIRE(db_migrate(db) == true);
 
-	SECTION("tracking table records V1 as successful") {
-		REQUIRE(migration_count(db) == 1);
+	SECTION("tracking table records migrations as successful") {
+		REQUIRE(migration_count(db) == 2);
 
 		sqlite3_stmt *stmt = nullptr;
 		sqlite3_prepare_v2(db,
@@ -70,6 +72,9 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 			-1, &stmt, nullptr);
 		REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
 		CHECK(sqlite3_column_int(stmt, 0) == 1);
+		CHECK(sqlite3_column_int(stmt, 1) == 1);
+		REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+		CHECK(sqlite3_column_int(stmt, 0) == 2);
 		CHECK(sqlite3_column_int(stmt, 1) == 1);
 		sqlite3_finalize(stmt);
 	}
@@ -147,8 +152,33 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 
 	SECTION("running db_migrate again is idempotent") {
 		REQUIRE(db_migrate(db) == true);
-		CHECK(migration_count(db) == 1);
+		CHECK(migration_count(db) == 2);
 	}
+
+	sqlite3_close(db);
+}
+
+TEST_CASE("db_migrate fixes integer division in existing V1 play table", "[db][migration]") {
+	sqlite3 *db = open_memory_db();
+
+	REQUIRE(sqlite3_exec(db, V001_sql, nullptr, nullptr, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_exec(db, R"(
+		INSERT INTO play(id, rating_total, rating_count, trash, played, skipped, duration)
+		VALUES('track-id', 15, 2, 0, 0, 0, 0)
+	)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	REQUIRE(db_migrate(db) == true);
+	CHECK(migration_count(db) == 2);
+
+	sqlite3_stmt *stmt = nullptr;
+	sqlite3_prepare_v2(db,
+		"SELECT rating_total, rating_count, rating FROM play WHERE id = 'track-id'",
+		-1, &stmt, nullptr);
+	REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+	CHECK(sqlite3_column_int64(stmt, 0) == 15);
+	CHECK(sqlite3_column_int64(stmt, 1) == 2);
+	CHECK(sqlite3_column_double(stmt, 2) == 7.5);
+	sqlite3_finalize(stmt);
 
 	sqlite3_close(db);
 }
