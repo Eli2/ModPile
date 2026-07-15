@@ -111,6 +111,7 @@ void tray_init(AppState &app) {
 		SDL_SetTrayEntryCallback(r0, [](void *userdata, SDL_TrayEntry *invoker) { \
 			auto &app = *static_cast<AppState*>(userdata); \
 			app.player.request.rating = _rating; \
+			app.player.track.rating = _rating; \
 		}, &app); \
 	} while(0)
 	
@@ -156,13 +157,15 @@ void tray_iterate(AppState &app) {
 	if(!g_tray) {
 		return;
 	}
-	if(lastRating != app.player.request.rating) {
-		lastRating = app.player.request.rating;
+	const auto rating = app.player.track.rating.load();
+	if(lastRating != rating) {
+		lastRating = rating;
 		
 		log_debug("Updating tray icon");
 		
-		auto str = std::to_string(lastRating);
-		auto c = str.back();
+		char c = lastRating >= 0 && lastRating <= 9
+			? static_cast<char>('0' + lastRating)
+			: ' ';
 		auto svg = create_icon(c);
 		if(svg) {
 			SDL_SetTrayIcon(g_tray, svg);

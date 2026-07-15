@@ -166,8 +166,8 @@ void updatePlayback(sqlite3* db, const PlayData &pd) {
 	
 	int64_t rating_total = 0;
 	int64_t rating_count = 0;
-	if(pd.rating != 0) {
-		rating_total = pd.rating;
+	if(pd.rating.has_value()) {
+		rating_total = pd.rating.value();
 		rating_count = 1;
 	}
 	
@@ -185,6 +185,37 @@ void updatePlayback(sqlite3* db, const PlayData &pd) {
 	}
 	
 	// sqlite3_db_cacheflush(db);
+}
+
+std::optional<double> db_get_rating(sqlite3* db, const std::string id) {
+
+	auto sql = R"(
+		SELECT rating
+		FROM play
+		WHERE id == ?1
+		  AND rating_count > 0
+		LIMIT 1;
+	)";
+
+	SQLITE_FINALIZE sqlite3_stmt *stmt = NULL;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		log_error("prepare failed: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	sqlite3_bind_text(stmt, 1, id.data(), id.length(), SQLITE_STATIC);
+
+	auto s = sqlite3_step(stmt);
+	if(s == SQLITE_DONE) {
+		return std::nullopt;
+	}
+	if(s != SQLITE_ROW) {
+		log_error("step failed: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	return sqlite_util_column_double(stmt, 0);
 }
 
 std::optional<std::string> db_get_random(sqlite3* db) {

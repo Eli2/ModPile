@@ -305,7 +305,8 @@ bool player_init(AppState &app) {
 			lastLoopCount = 0;
 			
 			
-			app.player.request.rating = 0;
+			app.player.request.rating = -1;
+			app.player.track.rating = -1;
 			app.player.request.trash = false;
 			
 			
@@ -443,6 +444,7 @@ bool player_init(AppState &app) {
 			}
 			
 			auto loudness = db_get_loudness(db, file.id);
+			auto rating = db_get_rating(db, file.id);
 			
 			pd.id = file.id;
 
@@ -493,6 +495,7 @@ bool player_init(AppState &app) {
 			app.player.track.id.set(file.id);
 			app.player.track.file_name.set(file.name);
 			app.player.track.name.set(displayName);
+			app.player.track.rating = rating.has_value() ? std::lround(rating.value()) : -1;
 			log_debug("Playing: {}", displayName);
 			
 			app.mpris.request.metadata_changed = true;
@@ -773,9 +776,10 @@ bool player_init(AppState &app) {
 			app.player.track.name.set("");
 			app.player.track.length = 0;
 			app.player.track.elapsed = 0;
+			app.player.track.rating = -1;
 			
 			
-			if(auto r = app.player.request.rating.exchange(0); r != 0) {
+			if(auto r = app.player.request.rating.exchange(-1); r >= 0) {
 				pd.rating = r;
 			}
 

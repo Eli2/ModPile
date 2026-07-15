@@ -145,6 +145,10 @@ void numblock_init(AppState &app) {
 					auto ks = keyState[scancode];
 					if(ks != lastState[scancode]) {
 						if(ks) {
+							auto rate = [&](long rating) {
+								app.player.request.rating = rating;
+								app.player.track.rating = rating;
+							};
 							switch(scancode) {
 							case 42: // Backspace
 								app.player.request.trash = true;
@@ -157,34 +161,34 @@ void numblock_init(AppState &app) {
 								app.player.request.next = true;
 								break;
 							case 89: // 1
-								app.player.request.rating = 1;
+								rate(1);
 								break;
 							case 90: // 2
-								app.player.request.rating = 2;
+								rate(2);
 								break;
 							case 91: // 3
-								app.player.request.rating = 3;
+								rate(3);
 								break;
 							case 92: // 4
-								app.player.request.rating = 4;
+								rate(4);
 								break;
 							case 93: // 5
-								app.player.request.rating = 5;
+								rate(5);
 								break;
 							case 94: // 6
-								app.player.request.rating = 6;
+								rate(6);
 								break;
 							case 95: // 7
-								app.player.request.rating = 7;
+								rate(7);
 								break;
 							case 96: // 8
-								app.player.request.rating = 8;
+								rate(8);
 								break;
 							case 97: // 9
-								app.player.request.rating = 9;
+								rate(9);
 								break;
 							case 98: // 0
-								app.player.request.rating = 0;
+								rate(0);
 								break;
 							default:
 								break;

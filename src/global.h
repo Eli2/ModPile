@@ -81,7 +81,7 @@ struct AppState {
 			std::atomic_bool stop = false;
 			std::atomic_bool next = false;
 			
-			std::atomic_long rating = 0;
+			std::atomic_long rating = -1;
 			std::atomic_bool trash = false;
 			
 			std::atomic<int64_t> seek     = std::numeric_limits<int64_t>::min();
@@ -124,6 +124,7 @@ struct AppState {
 			std::atomic<int>   length;
 			std::atomic<int>   elapsed;
 			std::atomic<float> gain = 1.0f;
+			std::atomic_long   rating = -1;
 		} track;
 	} player;
 	struct Pile {

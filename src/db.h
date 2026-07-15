@@ -13,7 +13,7 @@ bool db_init(AppState &app);
 
 struct PlayData {
 	std::string id = "";
-	long rating = 0;
+	std::optional<long> rating;
 	long trash = 0;
 	long played = 0;
 	long skipped = 0;
@@ -24,6 +24,7 @@ void updatePlayback(sqlite3* db, const PlayData &pd);
 
 std::optional<std::string> db_get_random(sqlite3 *db);
 
+std::optional<double> db_get_rating(sqlite3* db, const std::string id);
 std::optional<double> db_get_loudness(sqlite3* db, const std::string id);
 
 struct PlaylistTrackRef {
