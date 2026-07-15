@@ -18,12 +18,14 @@
 #include "log.h"
 
 
-static void exec(sqlite3* db, const char* sql) {
+static bool exec(sqlite3* db, const char* sql) {
 	SQLITE_FREE char *msg = nullptr;
 	int rc = sqlite3_exec(db, sql, 0, 0, &msg);
 	if(rc != SQLITE_OK){
 		log_error("SQL error: {} -> {}", sql, msg);
+		return false;
 	}
+	return true;
 }
 
 static void enable_pragmas(sqlite3* db) {
@@ -106,12 +108,20 @@ bool db_init(AppState &app) {
 	{
 		sqlite3_stmt* stmt = nullptr;
 		int32_t app_id = 0;
-		if(sqlite3_prepare_v2(db, "PRAGMA application_id", -1, &stmt, nullptr) == SQLITE_OK) {
-			if(sqlite3_step(stmt) == SQLITE_ROW) {
-				app_id = sqlite3_column_int(stmt, 0);
-			}
-			sqlite3_finalize(stmt);
+		if(sqlite3_prepare_v2(db, "PRAGMA application_id", -1, &stmt, nullptr) != SQLITE_OK) {
+			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
+			app.setup.error_message = "Could not inspect the selected database file.";
+			return false;
 		}
+		if(sqlite3_step(stmt) == SQLITE_ROW) {
+			app_id = sqlite3_column_int(stmt, 0);
+		} else {
+			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			app.setup.error_message = "Could not inspect the selected database file.";
+			return false;
+		}
+		sqlite3_finalize(stmt);
 
 		if(app_id == 0) {
 			auto empty = db_is_empty(db);
@@ -127,7 +137,10 @@ bool db_init(AppState &app) {
 
 			// Fresh empty database — stamp it as ours.
 			auto sql = std::format("PRAGMA application_id = {}", MODPILE_APPLICATION_ID);
-			exec(db, sql.c_str());
+			if(!exec(db, sql.c_str())) {
+				app.setup.error_message = "Could not mark the selected database file as a ModPile database.";
+				return false;
+			}
 		} else if(app_id != MODPILE_APPLICATION_ID) {
 			log_error("Refusing to open database: application_id 0x{:08X} does not match ModPile (0x{:08X})",
 				static_cast<uint32_t>(app_id), static_cast<uint32_t>(MODPILE_APPLICATION_ID));
@@ -228,6 +241,8 @@ std::optional<std::string> db_get_random(sqlite3* db) {
 	// The UNION ALL branch handles gaps at the tail end of the table (deleted
 	// rows): if no row exists with rowid >= the random threshold, fall back to
 	// the first row in the table (wrap-around). COALESCE handles empty tables.
+	// SQLite random() deliberately avoids INT64_MIN, so ABS(RANDOM()) cannot
+	// overflow here.
 	auto sql = R"(
 		SELECT file.id FROM file
 		WHERE rowid >= ABS(RANDOM()) % (SELECT COALESCE(max(rowid), 0) + 1 FROM file)

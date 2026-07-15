@@ -421,14 +421,20 @@ add_executable(ModPileTest
 	src/db/schema/schema.cpp
 	src/db/schema/V001_Initial_schema.cpp
 	src/db/schema/V002_Fix_rating_division.cpp
+	src/task/import.h
+	src/task/import.cpp
 
 	test/test_hash_util.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
+	test/test_playstats_import_export.cpp
 	test/test_xml_util.cpp
 )
 target_compile_features(ModPileTest PRIVATE
 	cxx_std_20
+)
+target_include_directories(ModPileTest PRIVATE
+	src/
 )
 target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
