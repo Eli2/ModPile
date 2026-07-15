@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2026 Eli2
 
-#include "SDL3_ttf/SDL_ttf.h"
 #include "util/curl_util.h"
 #include "xmp.h"
 #include <archive.h>
@@ -171,10 +170,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 	}
 
 	SDL_ShowWindow(app.window);
-
-	if(!TTF_Init()) {
-		return SDL_APP_FAILURE;
-	}
 
 	const std::string svg =
 		"<svg height='200' width='200'><circle cx='100' cy='100' r='80' stroke='white' stroke-width='4' fill='black'/></svg>";

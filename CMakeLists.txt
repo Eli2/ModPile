@@ -114,7 +114,6 @@ endif()
 if(MODPILE_USE_SYSTEM_SDL)
 	find_package(SDL3 REQUIRED)
 	find_package(SDL3_image REQUIRED)
-	find_package(SDL3_ttf REQUIRED)
 else()
 	FetchContent_Declare(
 		SDL3
@@ -128,18 +127,12 @@ else()
 		GIT_REPOSITORY https://github.com/libsdl-org/SDL_image
 		GIT_TAG        ad58ecfc27a1bd09e510ceff8bbbdb1094806476 # 3.4.0
 	)
-	FetchContent_Declare(
-		SDL3_ttf
-		GIT_SHALLOW    ON
-		GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf
-		GIT_TAG        a1ce3670aec736ecbf0936c43f2f0cc53aa61e5b # 3.2.2
-	)
 
 	set(SDL_SHARED OFF)
 	set(SDL_STATIC ON)
 	set(SDL_TEST_LIBRARY OFF)
 	set(SDL_AUDIO OFF)
-	FetchContent_MakeAvailable(SDL3 SDL3_image SDL3_ttf)
+	FetchContent_MakeAvailable(SDL3 SDL3_image)
 endif()
 
 
@@ -377,7 +370,6 @@ target_link_libraries(ModPile PRIVATE
 	$<$<BOOL:${MODPILE_ENABLE_MPRIS}>:systemd>
 	SDL3::SDL3
 	SDL3_image::SDL3_image
-	SDL3_ttf::SDL3_ttf
 	imgui::imgui
 	OpenAL::OpenAL
 	ebur128

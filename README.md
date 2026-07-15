@@ -51,7 +51,7 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 | `MODPILE_USE_SYSTEM_LIBARCHIVE` | `ON`    | Use system libarchive; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_LIBXMP`     | `ON`    | Use system libxmp; set `OFF` to fetch and build from source                       |
 | `MODPILE_USE_SYSTEM_ZSTD`       | `ON`    | Use system zstd; set `OFF` to fetch and build from source                         |
-| `MODPILE_USE_SYSTEM_SDL`        | `ON`    | Use system SDL3/SDL3\_image/SDL3\_ttf; set `OFF` to fetch and build from source   |
+| `MODPILE_USE_SYSTEM_SDL`        | `ON`    | Use system SDL3/SDL3\_image; set `OFF` to fetch and build from source             |
 | `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
@@ -76,8 +76,7 @@ sudo apt install \
     libkissfft-dev \
     libglm-dev \
     libsdl3-dev \
-    libsdl3-image-dev \
-    libsdl3-ttf-dev
+    libsdl3-image-dev
 ```
 
 ```sh
@@ -107,8 +106,7 @@ sudo pacman -S --needed \
     zstd \
     glm \
     sdl3 \
-    sdl3_image \
-    sdl3_ttf
+    sdl3_image
 ```
 
 ```sh
@@ -139,8 +137,7 @@ sudo dnf install \
     systemd-devel \
     glm-devel \
     SDL3-devel \
-    SDL3_image-devel \
-    SDL3_ttf-devel
+    SDL3_image-devel
 ```
 
 ```sh
