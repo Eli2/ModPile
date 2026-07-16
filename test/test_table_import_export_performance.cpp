@@ -109,6 +109,35 @@ void benchmark_export(Catch::Benchmark::Chronometer meter, size_t rows, size_t b
 	sqlite3_close(db);
 }
 
+void benchmark_raw_sqlite_insert(Catch::Benchmark::Chronometer meter, size_t rows) {
+	meter.measure([&] {
+		sqlite3 *db = create_benchmark_db();
+		if(!db || sqlite3_exec(db, "BEGIN", nullptr, nullptr, nullptr) != SQLITE_OK) return false;
+		sqlite3_stmt *stmt = nullptr;
+		if(sqlite3_prepare_v2(db,
+			"INSERT INTO sample(id, name, score, payload) VALUES(?1, ?2, ?3, NULL)",
+			-1, &stmt, nullptr) != SQLITE_OK) {
+			sqlite3_close(db);
+			return false;
+		}
+		bool ok = true;
+		for(size_t i = 0; i < rows; ++i) {
+			sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(i));
+			sqlite3_bind_text(stmt, 2, "track\tname", -1, SQLITE_STATIC);
+			sqlite3_bind_double(stmt, 3, 123.5);
+			if(sqlite3_step(stmt) != SQLITE_DONE) {
+				ok = false;
+				break;
+			}
+			sqlite3_reset(stmt);
+		}
+		sqlite3_finalize(stmt);
+		ok = ok && sqlite3_exec(db, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK;
+		sqlite3_close(db);
+		return ok;
+	});
+}
+
 } // namespace
 
 TEST_CASE("generic table import export performance", "[!benchmark][db][table]") {
@@ -125,6 +154,9 @@ TEST_CASE("generic table import export performance", "[!benchmark][db][table]") 
 	};
 	BENCHMARK_ADVANCED("import 100,000 text rows")(Catch::Benchmark::Chronometer meter) {
 		benchmark_import(meter, text100k);
+	};
+	BENCHMARK_ADVANCED("raw SQLite insert 100,000 rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_raw_sqlite_insert(meter, 100'000);
 	};
 	BENCHMARK_ADVANCED("import 1,000 768-byte blobs")(Catch::Benchmark::Chronometer meter) {
 		benchmark_import(meter, blob1k);

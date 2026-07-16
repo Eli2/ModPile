@@ -32,15 +32,6 @@ static std::string quote_identifier(const std::string &identifier) {
 	return quoted;
 }
 
-struct FieldValue {
-	enum class Type { Text, TextView, Null, Blob, Integer, Real };
-	Type type = Type::Text;
-	std::string data;
-	std::string_view view;
-	int64_t integer = 0;
-	double real = 0.0;
-};
-
 static bool prepare_insert(
 	sqlite3 *db,
 	const std::string &table,
@@ -73,55 +64,6 @@ static bool prepare_insert(
 	return true;
 }
 
-static bool insert_row(sqlite3 *db, sqlite3_stmt *stmt, const std::vector<FieldValue> &row) {
-	int rc = sqlite3_reset(stmt);
-	if(rc != SQLITE_OK) {
-		log_error("statement reset failed: {}", sqlite3_errmsg(db));
-		return false;
-	}
-	rc = sqlite3_clear_bindings(stmt);
-	if(rc != SQLITE_OK) {
-		log_error("clearing statement bindings failed: {}", sqlite3_errmsg(db));
-		return false;
-	}
-	for(size_t i = 0; i < row.size(); i++) {
-		int r = SQLITE_OK;
-		switch(row[i].type) {
-		case FieldValue::Type::Text:
-			r = sqliteu_bind_string(stmt, i + 1, row[i].data);
-			break;
-		case FieldValue::Type::TextView:
-			r = sqlite3_bind_text64(stmt, i + 1, row[i].view.data(), row[i].view.size(),
-				SQLITE_TRANSIENT, SQLITE_UTF8);
-			break;
-		case FieldValue::Type::Null:
-			r = sqlite3_bind_null(stmt, i + 1);
-			break;
-		case FieldValue::Type::Blob:
-			r = sqlite3_bind_blob64(
-				stmt, i + 1, row[i].data.data(), row[i].data.size(), SQLITE_TRANSIENT);
-			break;
-		case FieldValue::Type::Integer:
-			r = sqlite3_bind_int64(stmt, i + 1, row[i].integer);
-			break;
-		case FieldValue::Type::Real:
-			r = sqlite3_bind_double(stmt, i + 1, row[i].real);
-			break;
-		}
-		if(r != SQLITE_OK) {
-			log_error("bind failed: {}", sqlite3_errmsg(db));
-			return false;
-		}
-	}
-
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE) {
-		log_error("step failed: {}", sqlite3_errmsg(db));
-		return false;
-	}
-	return true;
-}
-
 static void write_escaped_field(std::ostream &out, std::string_view field) {
 	size_t chunkStart = 0;
 	for(size_t i = 0; i < field.size(); ++i) {
@@ -144,15 +86,15 @@ static void write_escaped_field(std::ostream &out, std::string_view field) {
 	out.write(field.data() + chunkStart, field.size() - chunkStart);
 }
 
-static std::optional<std::string> unescape_field(std::string_view field) {
-	std::string unescaped;
-	unescaped.reserve(field.size());
+static bool unescape_field(std::string_view field, std::string &unescaped) {
+	unescaped.clear();
+	if(unescaped.capacity() < field.size()) unescaped.reserve(field.size());
 	for(size_t i = 0; i < field.size(); i++) {
 		if(field[i] != '\\') {
 			unescaped += field[i];
 			continue;
 		}
-		if(i + 1 >= field.size()) return std::nullopt;
+		if(i + 1 >= field.size()) return false;
 
 		i++;
 		switch(field[i]) {
@@ -164,9 +106,15 @@ static std::optional<std::string> unescape_field(std::string_view field) {
 		case 'n':  unescaped += '\n'; break;
 		case 't':  unescaped += '\t'; break;
 		case 'v':  unescaped += '\v'; break;
-		default: return std::nullopt;
+		default: return false;
 		}
 	}
+	return true;
+}
+
+static std::optional<std::string> unescape_field(std::string_view field) {
+	std::string unescaped;
+	if(!unescape_field(field, unescaped)) return std::nullopt;
 	return unescaped;
 }
 
@@ -186,82 +134,105 @@ static void split_fields(std::string_view line, std::vector<std::string_view> &f
 
 static bool identifier_equal_ascii(std::string_view lhs, std::string_view rhs);
 
-static bool decode_fields(
-	const std::vector<std::string_view> &row,
-	const std::vector<std::string> &columnTypes,
-	std::vector<FieldValue> &decoded
-) {
-	decoded.clear();
-	if(decoded.capacity() < row.size()) decoded.reserve(row.size());
-	for(size_t i = 0; i < row.size(); ++i) {
-		const auto &field = row[i];
-		// PostgreSQL COPY text convention: \N represents SQL NULL. It is
-		// recognized before unescaping, so a literal "\N" (exported as "\\N")
-		// remains distinct from the sentinel.
-		if(field == "\\N") {
-			FieldValue result;
-			result.type = FieldValue::Type::Null;
-			decoded.push_back(std::move(result));
-		} else if(field.starts_with("\\B")) {
-			auto blob = base64_decode(std::string_view(field).substr(2));
-			if(!blob) return false;
-			std::string blob_data;
-			if(!blob->empty()) {
-				blob_data.assign(reinterpret_cast<const char*>(blob->data()), blob->size());
-			}
-			FieldValue result;
-			result.type = FieldValue::Type::Blob;
-			result.data = std::move(blob_data);
-			decoded.push_back(std::move(result));
-		} else {
-			std::optional<std::string> unescaped;
-			std::string_view text = field;
-			if(field.find('\\') != std::string_view::npos) {
-				unescaped = unescape_field(field);
-				if(!unescaped) return false;
-				text = *unescaped;
-			}
-			if(identifier_equal_ascii(columnTypes[i], "INTEGER")) {
-				int64_t value = 0;
-				const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-				if(error == std::errc{} && end == text.data() + text.size()) {
-					FieldValue result;
-					result.type = FieldValue::Type::Integer;
-					result.integer = value;
-					decoded.push_back(std::move(result));
-					continue;
-				}
-			} else if(identifier_equal_ascii(columnTypes[i], "REAL")) {
-				double value = 0.0;
-				const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-				if(error == std::errc{} && end == text.data() + text.size()) {
-					FieldValue result;
-					result.type = FieldValue::Type::Real;
-					result.real = value;
-					decoded.push_back(std::move(result));
-					continue;
-				}
-			}
-			FieldValue result;
-			if(unescaped) {
-				result.type = FieldValue::Type::Text;
-				result.data = std::move(*unescaped);
-			} else {
-				result.type = FieldValue::Type::TextView;
-				result.view = text;
-			}
-			decoded.push_back(std::move(result));
-		}
-	}
-	return true;
-}
-
 static bool validate_encoded_field(std::string_view field) {
 	if(field == "\\N") return true;
 	if(field.starts_with("\\B")) {
 		return base64_decode(field.substr(2)).has_value();
 	}
+	if(field.find('\\') == std::string_view::npos) return true;
 	return unescape_field(field).has_value();
+}
+
+enum class ImportType { Text, Integer, Real };
+
+struct ImportColumn {
+	int parameter = 0; // Zero means the source column is ignored.
+	ImportType type = ImportType::Text;
+};
+
+static ImportType import_type(std::string_view declaredType) {
+	if(identifier_equal_ascii(declaredType, "INTEGER")) return ImportType::Integer;
+	if(identifier_equal_ascii(declaredType, "REAL")) return ImportType::Real;
+	return ImportType::Text;
+}
+
+static bool bind_encoded_field(
+	sqlite3_stmt *stmt,
+	int parameter,
+	ImportType type,
+	std::string_view field,
+	std::string &decodeBuffer
+) {
+	if(field == "\\N") return sqlite3_bind_null(stmt, parameter) == SQLITE_OK;
+	if(field.starts_with("\\B")) {
+		auto blob = base64_decode(field.substr(2));
+		if(!blob) return false;
+		static constexpr std::byte emptyBlob{};
+		const void *data = blob->empty() ? &emptyBlob : blob->data();
+		return sqlite3_bind_blob64(stmt, parameter, data, blob->size(), SQLITE_TRANSIENT) == SQLITE_OK;
+	}
+
+	std::string_view text = field;
+	bool decoded = false;
+	if(field.find('\\') != std::string_view::npos) {
+		if(!unescape_field(field, decodeBuffer)) return false;
+		text = decodeBuffer;
+		decoded = true;
+	}
+
+	if(type == ImportType::Integer) {
+		int64_t value = 0;
+		const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+		if(error == std::errc{} && end == text.data() + text.size()) {
+			return sqlite3_bind_int64(stmt, parameter, value) == SQLITE_OK;
+		}
+	} else if(type == ImportType::Real) {
+		double value = 0.0;
+		const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+		if(error == std::errc{} && end == text.data() + text.size()) {
+			return sqlite3_bind_double(stmt, parameter, value) == SQLITE_OK;
+		}
+	}
+	return sqlite3_bind_text64(stmt, parameter, text.data(), text.size(),
+		decoded ? SQLITE_TRANSIENT : SQLITE_STATIC, SQLITE_UTF8) == SQLITE_OK;
+}
+
+enum class InsertLineResult { Ok, ColumnCountMismatch, InvalidField, SqliteError };
+
+static InsertLineResult insert_line(
+	sqlite3 *db,
+	sqlite3_stmt *stmt,
+	std::string_view line,
+	const std::vector<ImportColumn> &columns,
+	std::string &decodeBuffer
+) {
+	if(sqlite3_reset(stmt) != SQLITE_OK || sqlite3_clear_bindings(stmt) != SQLITE_OK) {
+		log_error("resetting insert statement failed: {}", sqlite3_errmsg(db));
+		return InsertLineResult::SqliteError;
+	}
+
+	size_t column = 0;
+	size_t pos = 0;
+	while(true) {
+		if(column == columns.size()) return InsertLineResult::ColumnCountMismatch;
+		const auto next = line.find('\t', pos);
+		const auto field = next == std::string_view::npos
+			? line.substr(pos)
+			: line.substr(pos, next - pos);
+		const auto &mapping = columns[column++];
+		const bool valid = mapping.parameter == 0
+			? validate_encoded_field(field)
+			: bind_encoded_field(stmt, mapping.parameter, mapping.type, field, decodeBuffer);
+		if(!valid) return InsertLineResult::InvalidField;
+		if(next == std::string_view::npos) break;
+		pos = next + 1;
+	}
+	if(column != columns.size()) return InsertLineResult::ColumnCountMismatch;
+	if(sqlite3_step(stmt) != SQLITE_DONE) {
+		log_error("step failed: {}", sqlite3_errmsg(db));
+		return InsertLineResult::SqliteError;
+	}
+	return InsertLineResult::Ok;
 }
 
 struct ColumnInfo {
@@ -325,27 +296,6 @@ static std::optional<bool> table_is_strict(sqlite3 *db, const std::string &table
 	return strict;
 }
 
-static std::vector<size_t> remove_non_insertable_columns(
-	std::vector<std::string> &header,
-	const std::vector<ColumnInfo> &insertableColumns
-) {
-	std::vector<size_t> removed;
-	for(size_t i = 0; i < header.size(); i++) {
-		auto column = std::ranges::find_if(insertableColumns, [&](const ColumnInfo &candidate) {
-			return identifier_equal_ascii(candidate.name, header[i]);
-		});
-		if(column == insertableColumns.end()) {
-			removed.push_back(i);
-			header.erase(header.begin() + i);
-			i--;
-		} else {
-			// Use the spelling from SQLite when constructing the INSERT statement.
-			header[i] = column->name;
-		}
-	}
-	return removed;
-}
-
 static const ColumnInfo *find_column(
 	const std::vector<ColumnInfo> &columns,
 	std::string_view name
@@ -363,23 +313,6 @@ static bool has_duplicate_columns(const std::vector<std::string> &columns) {
 		}
 	}
 	return false;
-}
-
-static void remove_columns(std::vector<std::string_view> &row, const std::vector<size_t> &columns) {
-	for(auto it = columns.rbegin(); it != columns.rend(); ++it) {
-		if(*it < row.size()) {
-			row.erase(row.begin() + *it);
-		}
-	}
-}
-
-static bool validate_columns(
-	const std::vector<std::string_view> &row,
-	const std::vector<size_t> &columns
-) {
-	return std::ranges::all_of(columns, [&](size_t column) {
-		return column < row.size() && validate_encoded_field(row[column]);
-	});
 }
 
 bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
@@ -486,11 +419,8 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 	int lineIdx = -1;
 	std::string line;
 	std::vector<std::string> header;
-	std::vector<std::string> columnTypes;
-	std::vector<size_t> ignoredColumns;
-	std::vector<std::string_view> rowVec;
-	std::vector<FieldValue> decoded;
-	size_t sourceColumnCount = 0;
+	std::vector<ImportColumn> importColumns;
+	std::string decodeBuffer;
 	SQLITE_FINALIZE sqlite3_stmt *insertStmt = nullptr;
 	bool sawHeader = false;
 	while(std::getline(in, line)) {
@@ -515,15 +445,16 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 				log_error("Table import header contains duplicate column names");
 				return false;
 			}
-			sourceColumnCount = header.size();
-			ignoredColumns = remove_non_insertable_columns(header, insertableColumns);
-			if(header.empty()) {
-				log_error("Table import header contains no insertable columns");
-				return false;
-			}
+
+			std::vector<std::string> insertHeader;
+			insertHeader.reserve(header.size());
+			importColumns.reserve(header.size());
 			for(const auto &name : header) {
 				const auto *column = find_column(insertableColumns, name);
-				if(!column) return false;
+				if(!column) {
+					importColumns.push_back({});
+					continue;
+				}
 				if(identifier_equal_ascii(column->type, "ANY")) {
 					log_error(
 						"Cannot safely import column {}.{} with type ANY in a {} table: "
@@ -532,39 +463,32 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 					);
 					return false;
 				}
-				columnTypes.push_back(column->type);
+				insertHeader.push_back(column->name);
+				importColumns.push_back({
+					static_cast<int>(insertHeader.size()), import_type(column->type)
+				});
 			}
-			if(!prepare_insert(db, table, header, &insertStmt)) return false;
+			if(insertHeader.empty()) {
+				log_error("Table import header contains no insertable columns");
+				return false;
+			}
+			if(!prepare_insert(db, table, insertHeader, &insertStmt)) return false;
 			continue;
 		}
 
-		split_fields(line, rowVec);
-		if(sourceColumnCount != rowVec.size()) {
+		switch(insert_line(db, insertStmt, line, importColumns, decodeBuffer)) {
+		case InsertLineResult::Ok:
+			break;
+		case InsertLineResult::ColumnCountMismatch:
 			log_error(
-				"Column count mismatch on row {}: expected {}, got {}",
-				lineIdx + 1, sourceColumnCount, rowVec.size()
+				"Column count mismatch on row {}: expected {} columns",
+				lineIdx + 1, importColumns.size()
 			);
 			return false;
-		}
-		if(!validate_columns(rowVec, ignoredColumns)) {
-			log_error("Invalid encoded field in an ignored column on row {}", lineIdx + 1);
-			return false;
-		}
-		remove_columns(rowVec, ignoredColumns);
-		if(header.size() != rowVec.size()) {
-			log_error(
-				"Column count mismatch on row {}: expected {}, got {}",
-				lineIdx + 1, header.size(), rowVec.size()
-			);
-			return false;
-		}
-
-		if(!decode_fields(rowVec, columnTypes, decoded)) {
+		case InsertLineResult::InvalidField:
 			log_error("Invalid encoded field on row {}", lineIdx + 1);
 			return false;
-		}
-
-		if(!insert_row(db, insertStmt, decoded)) {
+		case InsertLineResult::SqliteError:
 			log_error("Failed to import row {}", lineIdx + 1);
 			return false;
 		}
