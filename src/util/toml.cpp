@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <format>
 #include <fstream>
-#include <iterator>
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -260,7 +259,13 @@ bool TomlWriter::load(const std::filesystem::path &path) {
 }
 
 bool TomlWriter::load(std::istream &input) {
-	std::string document{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+	std::string document;
+	char buffer[4096];
+	while (input) {
+		input.read(buffer, sizeof(buffer));
+		const auto count = input.gcount();
+		if (count > 0) document.append(buffer, static_cast<size_t>(count));
+	}
 	if (input.bad()) return false;
 	m_buf = std::move(document);
 	m_section.clear();
