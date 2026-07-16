@@ -222,3 +222,23 @@ TEST_CASE("table import rejects malformed blob encoding", "[db][table]") {
 
 	sqlite3_close(db);
 }
+
+TEST_CASE("table import rejects ANY columns because storage class is not encoded", "[db][table]") {
+	for(const auto *suffix : {"", " STRICT"}) {
+		DYNAMIC_SECTION("mode: " << (suffix[0] ? "STRICT ANY" : "non-STRICT ANY")) {
+			sqlite3 *db = open_memory_db();
+			const auto create = std::string("CREATE TABLE sample (id TEXT, value ANY)") + suffix;
+			REQUIRE(sqlite3_exec(db, create.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK);
+
+			std::istringstream in("id\tvalue\nrow\t42\n");
+			CHECK_FALSE(db_import_table(db, "sample", in));
+
+			sqlite3_stmt *count = nullptr;
+			REQUIRE(sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM sample", -1, &count, nullptr) == SQLITE_OK);
+			REQUIRE(sqlite3_step(count) == SQLITE_ROW);
+			CHECK(sqlite3_column_int(count, 0) == 0);
+			sqlite3_finalize(count);
+			sqlite3_close(db);
+		}
+	}
+}

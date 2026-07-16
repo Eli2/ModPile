@@ -3,6 +3,7 @@
 #include "table_import_export.h"
 
 #include <algorithm>
+#include <cctype>
 #include <format>
 #include <istream>
 #include <optional>
@@ -206,6 +207,55 @@ static std::vector<std::string> insertable_columns(sqlite3 *db, const std::strin
 	return columns;
 }
 
+static bool identifier_equal_ascii(std::string_view lhs, std::string_view rhs) {
+	return lhs.size() == rhs.size() && std::ranges::equal(lhs, rhs, [](char a, char b) {
+		return std::toupper(static_cast<unsigned char>(a)) ==
+			std::toupper(static_cast<unsigned char>(b));
+	});
+}
+
+static std::optional<bool> table_is_strict(sqlite3 *db, const std::string &table) {
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+	if(sqlite3_prepare_v2(db, "PRAGMA table_list", -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("Failed to inspect table mode: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	int rc;
+	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		if(sqlite3_column_string(stmt, 1) == table) {
+			return sqlite3_column_int(stmt, 5) != 0;
+		}
+	}
+	if(rc != SQLITE_DONE) {
+		log_error("Failed to inspect table mode: {}", sqlite3_errmsg(db));
+	}
+	return std::nullopt;
+}
+
+static std::optional<std::string> first_insertable_any_column(sqlite3 *db, const std::string &table) {
+	auto sql = std::format("PRAGMA table_xinfo({})", quote_identifier(table));
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+	if(sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("Failed to inspect table column types: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	int rc;
+	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		const auto hidden = sqlite3_column_int(stmt, 6);
+		const auto type = sqlite3_column_string(stmt, 2);
+		if(hidden == 0 && identifier_equal_ascii(type, "ANY")) {
+			return sqlite3_column_string(stmt, 1);
+		}
+	}
+	if(rc != SQLITE_DONE) {
+		log_error("Failed to inspect table column types: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+	return std::string{};
+}
+
 static std::vector<size_t> remove_non_insertable_columns(
 	std::vector<std::string> &header,
 	const std::vector<std::string> &insertableColumns
@@ -280,6 +330,24 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 
 bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 	log_debug("Importing table {}", table);
+
+	const auto strict = table_is_strict(db, table);
+	if(!strict.has_value()) {
+		log_error("Could not determine whether table {} is STRICT", table);
+		return false;
+	}
+	const auto anyColumn = first_insertable_any_column(db, table);
+	if(!anyColumn.has_value()) {
+		return false;
+	}
+	if(!anyColumn->empty()) {
+		log_error(
+			"Cannot safely import column {}.{} with type ANY in a {} table: "
+			"the original SQLite storage class is not encoded",
+			table, *anyColumn, *strict ? "STRICT" : "non-STRICT"
+		);
+		return false;
+	}
 
 	const auto insertableColumns = insertable_columns(db, table);
 	if(insertableColumns.empty()) {
