@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 struct TaskProgress {
@@ -19,6 +20,7 @@ struct TaskProgress {
 struct TaskStatusFrame {
 	std::string label;
 	std::optional<TaskProgress> progress;
+	std::vector<TaskStatusFrame> children;
 };
 
 struct TaskStatus {
@@ -44,6 +46,7 @@ public:
 		void progress(uint64_t current, uint64_t total, std::string_view unit = {});
 		void counter(uint64_t current, std::string_view unit = {});
 		void clear_progress();
+		Scope scope(std::string label) const;
 
 	private:
 		friend class TaskControl;
@@ -65,8 +68,15 @@ public:
 	void aborted(std::string message = {});
 
 private:
-	struct Frame : TaskStatusFrame { uint64_t id = 0; };
+	struct Frame {
+		uint64_t id = 0;
+		uint64_t parentId = 0;
+		std::thread::id creator;
+		std::string label;
+		std::optional<TaskProgress> progress;
+	};
 
+	Scope create_scope(std::string label, std::optional<uint64_t> parentId);
 	void pop(uint64_t id);
 	void set_label(uint64_t id, std::string label);
 	void set_progress(uint64_t id, std::optional<TaskProgress> progress);

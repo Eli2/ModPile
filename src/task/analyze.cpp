@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Eli2
 #include "analyze.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <exception>
@@ -95,7 +96,8 @@ static void add_result(sqlite3* db, const std::string &id, double loudness, int6
 	}
 }
 
-static AnalysisResult analyze_file(const FileRow &file, const std::atomic_bool &abort) {
+static AnalysisResult analyze_file(
+		const FileRow &file, const std::atomic_bool &abort, TaskControl::Scope &status) {
 	AnalysisResult result;
 	result.id = file.id;
 	result.name = file.name;
@@ -147,9 +149,12 @@ static AnalysisResult analyze_file(const FileRow &file, const std::atomic_bool &
 	
 	// Cap at 10 minutes to handle modules with infinite pattern loops (E6x etc.)
 	// that never reach the end of the order list and thus never increment loop_count.
+	constexpr int maxAnalysisMilliseconds = 10 * 60 * 1000;
 	const long maxSamples = 10L * 60 * freq;
 	long totalSamples = 0;
 	int lastLoopCount = 0;
+	int64_t lastReportedSecond = -1;
+	int64_t lastReportedTotalSeconds = -1;
 	PcmAudibleDuration audibleDuration(freq, 2);
 
 	while(xmp_play_frame(xmp) == 0) {
@@ -172,6 +177,24 @@ static AnalysisResult analyze_file(const FileRow &file, const std::atomic_bool &
 		totalSamples += frames;
 		if(totalSamples > maxSamples) {
 			break;
+		}
+		const auto decodedSeconds = static_cast<int64_t>(totalSamples / freq);
+		const auto cappedTotalMilliseconds = fi.total_time > 0
+			? std::min(fi.total_time, maxAnalysisMilliseconds)
+			: 0;
+		const auto totalSeconds = static_cast<int64_t>(
+			(cappedTotalMilliseconds + 999) / 1000);
+		const auto elapsedSeconds = totalSeconds > 0
+			? std::min<int64_t>(std::max(fi.time, 0) / 1000, totalSeconds)
+			: decodedSeconds;
+		if(elapsedSeconds != lastReportedSecond || totalSeconds != lastReportedTotalSeconds) {
+			lastReportedSecond = elapsedSeconds;
+			lastReportedTotalSeconds = totalSeconds;
+			if(totalSeconds > 0) {
+				status.progress(elapsedSeconds, totalSeconds, "seconds");
+			} else {
+				status.counter(elapsedSeconds, "seconds");
+			}
 		}
 
 		const auto pcm = std::span<const int16_t>(src, static_cast<size_t>(frames) * 2);
@@ -247,11 +270,13 @@ void analyze_run(TaskControl &tc, sqlite3 *db) {
 		}
 	);
 	for(size_t i = 0; i < kAnalyzerThreads; ++i) {
-		workers.push_back(thread_create(std::format("Analyze {}", i + 1), [&] {
+		workers.push_back(thread_create(std::format("Analyze {}", i + 1), [&, worker = i + 1] {
+			auto worker_status = task_status.scope(std::format("Worker {}", worker));
 			while(auto file = jobs.pop()) {
+				auto file_status = worker_status.scope(file->name);
 				AnalysisResult result;
 				try {
-					result = analyze_file(*file, tc.abort);
+					result = analyze_file(*file, tc.abort, file_status);
 				} catch(const std::exception &error) {
 					result.id = file->id;
 					result.name = file->name;
