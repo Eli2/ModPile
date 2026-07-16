@@ -72,8 +72,16 @@ static bool prepare_insert(
 }
 
 static bool insert_row(sqlite3 *db, sqlite3_stmt *stmt, const std::vector<FieldValue> &row) {
-	sqlite3_reset(stmt);
-	sqlite3_clear_bindings(stmt);
+	int rc = sqlite3_reset(stmt);
+	if(rc != SQLITE_OK) {
+		log_error("statement reset failed: {}", sqlite3_errmsg(db));
+		return false;
+	}
+	rc = sqlite3_clear_bindings(stmt);
+	if(rc != SQLITE_OK) {
+		log_error("clearing statement bindings failed: {}", sqlite3_errmsg(db));
+		return false;
+	}
 	for(size_t i = 0; i < row.size(); i++) {
 		int r = SQLITE_OK;
 		switch(row[i].type) {
@@ -100,7 +108,7 @@ static bool insert_row(sqlite3 *db, sqlite3_stmt *stmt, const std::vector<FieldV
 		}
 	}
 
-	const int rc = sqlite3_step(stmt);
+	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
 		return false;
@@ -129,14 +137,15 @@ static std::string escape_field(std::string_view field) {
 	return escaped;
 }
 
-static std::string unescape_field(std::string_view field) {
+static std::optional<std::string> unescape_field(std::string_view field) {
 	std::string unescaped;
 	unescaped.reserve(field.size());
 	for(size_t i = 0; i < field.size(); i++) {
-		if(field[i] != '\\' || i + 1 >= field.size()) {
+		if(field[i] != '\\') {
 			unescaped += field[i];
 			continue;
 		}
+		if(i + 1 >= field.size()) return std::nullopt;
 
 		i++;
 		switch(field[i]) {
@@ -148,10 +157,7 @@ static std::string unescape_field(std::string_view field) {
 		case 'n':  unescaped += '\n'; break;
 		case 't':  unescaped += '\t'; break;
 		case 'v':  unescaped += '\v'; break;
-		default:
-			unescaped += '\\';
-			unescaped += field[i];
-			break;
+		default: return std::nullopt;
 		}
 	}
 	return unescaped;
@@ -197,11 +203,12 @@ static std::optional<std::vector<FieldValue>> decode_fields(
 			decoded.push_back({FieldValue::Type::Blob, std::move(blob_data)});
 		} else {
 			auto text = unescape_field(field);
+			if(!text) return std::nullopt;
 			if(identifier_equal_ascii(columnTypes[i], "INTEGER")) {
 				try {
 					size_t parsed = 0;
-					const auto value = std::stoll(text, &parsed);
-					if(parsed == text.size()) {
+					const auto value = std::stoll(*text, &parsed);
+					if(parsed == text->size()) {
 						FieldValue result;
 						result.type = FieldValue::Type::Integer;
 						result.integer = value;
@@ -212,8 +219,8 @@ static std::optional<std::vector<FieldValue>> decode_fields(
 			} else if(identifier_equal_ascii(columnTypes[i], "REAL")) {
 				try {
 					size_t parsed = 0;
-					const auto value = std::stod(text, &parsed);
-					if(parsed == text.size()) {
+					const auto value = std::stod(*text, &parsed);
+					if(parsed == text->size()) {
 						FieldValue result;
 						result.type = FieldValue::Type::Real;
 						result.real = value;
@@ -222,7 +229,7 @@ static std::optional<std::vector<FieldValue>> decode_fields(
 					}
 				} catch(...) {}
 			}
-			decoded.push_back({FieldValue::Type::Text, std::move(text)});
+			decoded.push_back({FieldValue::Type::Text, std::move(*text)});
 		}
 	}
 	return decoded;
@@ -454,7 +461,12 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 			sawHeader = true;
 			header = split_fields(line);
 			for(auto &column : header) {
-				column = unescape_field(column);
+				auto decoded = unescape_field(column);
+				if(!decoded) {
+					log_error("Invalid escape sequence in table import header");
+					return false;
+				}
+				column = std::move(*decoded);
 			}
 			if(has_duplicate_columns(header)) {
 				log_error("Table import header contains duplicate column names");
