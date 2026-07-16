@@ -173,11 +173,9 @@ static bool bind_encoded_field(
 	}
 
 	std::string_view text = field;
-	bool decoded = false;
 	if(field.find('\\') != std::string_view::npos) {
 		if(!unescape_field(field, decodeBuffer)) return false;
 		text = decodeBuffer;
-		decoded = true;
 	}
 
 	if(type == ImportType::Integer) {
@@ -194,7 +192,7 @@ static bool bind_encoded_field(
 		}
 	}
 	return sqlite3_bind_text64(stmt, parameter, text.data(), text.size(),
-		decoded ? SQLITE_TRANSIENT : SQLITE_STATIC, SQLITE_UTF8) == SQLITE_OK;
+		SQLITE_TRANSIENT, SQLITE_UTF8) == SQLITE_OK;
 }
 
 enum class InsertLineResult { Ok, ColumnCountMismatch, InvalidField, SqliteError };
@@ -206,7 +204,9 @@ static InsertLineResult insert_line(
 	const std::vector<ImportColumn> &columns,
 	std::string &decodeBuffer
 ) {
-	if(sqlite3_reset(stmt) != SQLITE_OK || sqlite3_clear_bindings(stmt) != SQLITE_OK) {
+	// Every INSERT parameter has exactly one source column and is rebound for
+	// every row, so clearing all previous bindings would be redundant work.
+	if(sqlite3_reset(stmt) != SQLITE_OK) {
 		log_error("resetting insert statement failed: {}", sqlite3_errmsg(db));
 		return InsertLineResult::SqliteError;
 	}
