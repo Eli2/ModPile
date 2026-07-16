@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -283,6 +285,91 @@ TEST_CASE("table import rolls back on a malformed row", "[db][table]") {
 	REQUIRE(sqlite3_step(count) == SQLITE_ROW);
 	CHECK(sqlite3_column_int(count, 0) == 0);
 	sqlite3_finalize(count);
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import validates fields ignored by the destination schema", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT, value TEXT) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\tvalue\tfuture\ngood\tfirst\textra\nbad\tsecond\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *count = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM sample", -1, &count, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(count) == SQLITE_ROW);
+	CHECK(sqlite3_column_int(count, 0) == 0);
+	sqlite3_finalize(count);
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import rejects duplicate column names", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\tID\nfirst\tsecond\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import permits an unimported ANY column", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db,
+		"CREATE TABLE sample (id TEXT, value TEXT, untouched ANY) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\tvalue\nrow\t42\n");
+	REQUIRE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *select = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db,
+		"SELECT value, untouched FROM sample WHERE id = 'row'", -1, &select, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(select) == SQLITE_ROW);
+	CHECK(std::string(reinterpret_cast<const char*>(sqlite3_column_text(select, 0))) == "42");
+	CHECK(sqlite3_column_type(select, 1) == SQLITE_NULL);
+	sqlite3_finalize(select);
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import rejects ambiguous table names across schemas", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, R"(
+		CREATE TABLE sample (id TEXT) STRICT;
+		ATTACH ':memory:' AS other;
+		CREATE TABLE other.sample (id TEXT) STRICT;
+	)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\nrow\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import export preserves real infinities", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (value REAL) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	sqlite3_stmt *insert = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "INSERT INTO sample VALUES(?1)", -1, &insert, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_bind_double(insert, 1, std::numeric_limits<double>::infinity()) == SQLITE_OK);
+	REQUIRE(sqlite3_step(insert) == SQLITE_DONE);
+	sqlite3_finalize(insert);
+
+	std::ostringstream out;
+	REQUIRE(db_export_table(db, "sample", out));
+	REQUIRE(sqlite3_exec(db, "DELETE FROM sample", nullptr, nullptr, nullptr) == SQLITE_OK);
+	std::istringstream in(out.str());
+	REQUIRE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *select = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "SELECT value FROM sample", -1, &select, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(select) == SQLITE_ROW);
+	CHECK(sqlite3_column_type(select, 0) == SQLITE_FLOAT);
+	CHECK(std::isinf(sqlite3_column_double(select, 0)));
+	CHECK(sqlite3_column_double(select, 0) > 0.0);
+	sqlite3_finalize(select);
 	sqlite3_close(db);
 }
 

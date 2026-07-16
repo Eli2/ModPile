@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <format>
 #include <istream>
 #include <optional>
@@ -31,16 +32,18 @@ static std::string quote_identifier(const std::string &identifier) {
 }
 
 struct FieldValue {
-	enum class Type { Text, Null, Blob };
+	enum class Type { Text, Null, Blob, Integer, Real };
 	Type type = Type::Text;
 	std::string data;
+	int64_t integer = 0;
+	double real = 0.0;
 };
 
-static bool insert_row(
+static bool prepare_insert(
 	sqlite3 *db,
 	const std::string &table,
 	const std::vector<std::string> &header,
-	const std::vector<FieldValue> &row
+	sqlite3_stmt **stmt
 ) {
 	auto fields = str_join(header, ", ", quote_identifier);
 
@@ -60,13 +63,17 @@ static bool insert_row(
 		place
 	);
 
-	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
-	int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+	int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, stmt, nullptr);
 	if (rc != SQLITE_OK) {
 		log_error("prepare failed: {}", sqlite3_errmsg(db));
 		return false;
 	}
+	return true;
+}
 
+static bool insert_row(sqlite3 *db, sqlite3_stmt *stmt, const std::vector<FieldValue> &row) {
+	sqlite3_reset(stmt);
+	sqlite3_clear_bindings(stmt);
 	for(size_t i = 0; i < row.size(); i++) {
 		int r = SQLITE_OK;
 		switch(row[i].type) {
@@ -80,6 +87,12 @@ static bool insert_row(
 			r = sqlite3_bind_blob64(
 				stmt, i + 1, row[i].data.data(), row[i].data.size(), SQLITE_TRANSIENT);
 			break;
+		case FieldValue::Type::Integer:
+			r = sqlite3_bind_int64(stmt, i + 1, row[i].integer);
+			break;
+		case FieldValue::Type::Real:
+			r = sqlite3_bind_double(stmt, i + 1, row[i].real);
+			break;
 		}
 		if(r != SQLITE_OK) {
 			log_error("bind failed: {}", sqlite3_errmsg(db));
@@ -87,7 +100,7 @@ static bool insert_row(
 		}
 	}
 
-	rc = sqlite3_step(stmt);
+	const int rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
 		return false;
@@ -159,10 +172,16 @@ static std::vector<std::string> split_fields(std::string_view line) {
 	return fields;
 }
 
-static std::optional<std::vector<FieldValue>> decode_fields(const std::vector<std::string> &row) {
+static bool identifier_equal_ascii(std::string_view lhs, std::string_view rhs);
+
+static std::optional<std::vector<FieldValue>> decode_fields(
+	const std::vector<std::string> &row,
+	const std::vector<std::string> &columnTypes
+) {
 	std::vector<FieldValue> decoded;
 	decoded.reserve(row.size());
-	for(const auto &field : row) {
+	for(size_t i = 0; i < row.size(); ++i) {
+		const auto &field = row[i];
 		// PostgreSQL COPY text convention: \N represents SQL NULL. It is
 		// recognized before unescaping, so a literal "\N" (exported as "\\N")
 		// remains distinct from the sentinel.
@@ -177,13 +196,44 @@ static std::optional<std::vector<FieldValue>> decode_fields(const std::vector<st
 			}
 			decoded.push_back({FieldValue::Type::Blob, std::move(blob_data)});
 		} else {
-			decoded.push_back({FieldValue::Type::Text, unescape_field(field)});
+			auto text = unescape_field(field);
+			if(identifier_equal_ascii(columnTypes[i], "INTEGER")) {
+				try {
+					size_t parsed = 0;
+					const auto value = std::stoll(text, &parsed);
+					if(parsed == text.size()) {
+						FieldValue result;
+						result.type = FieldValue::Type::Integer;
+						result.integer = value;
+						decoded.push_back(std::move(result));
+						continue;
+					}
+				} catch(...) {}
+			} else if(identifier_equal_ascii(columnTypes[i], "REAL")) {
+				try {
+					size_t parsed = 0;
+					const auto value = std::stod(text, &parsed);
+					if(parsed == text.size()) {
+						FieldValue result;
+						result.type = FieldValue::Type::Real;
+						result.real = value;
+						decoded.push_back(std::move(result));
+						continue;
+					}
+				} catch(...) {}
+			}
+			decoded.push_back({FieldValue::Type::Text, std::move(text)});
 		}
 	}
 	return decoded;
 }
 
-static std::vector<std::string> insertable_columns(sqlite3 *db, const std::string &table) {
+struct ColumnInfo {
+	std::string name;
+	std::string type;
+};
+
+static std::vector<ColumnInfo> insertable_columns(sqlite3 *db, const std::string &table) {
 	auto sql = std::format("PRAGMA table_xinfo({})", quote_identifier(table));
 
 	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
@@ -193,11 +243,11 @@ static std::vector<std::string> insertable_columns(sqlite3 *db, const std::strin
 		return {};
 	}
 
-	std::vector<std::string> columns;
+	std::vector<ColumnInfo> columns;
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		const auto hidden = sqlite3_column_int(stmt, 6);
 		if(hidden == 0) {
-			columns.push_back(sqlite3_column_string(stmt, 1));
+			columns.push_back({sqlite3_column_string(stmt, 1), sqlite3_column_string(stmt, 2)});
 		}
 	}
 	if(rc != SQLITE_DONE) {
@@ -222,53 +272,60 @@ static std::optional<bool> table_is_strict(sqlite3 *db, const std::string &table
 	}
 
 	int rc;
+	std::optional<bool> strict;
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-		if(sqlite3_column_string(stmt, 1) == table) {
-			return sqlite3_column_int(stmt, 5) != 0;
+		if(identifier_equal_ascii(sqlite3_column_string(stmt, 1), table)) {
+			if(strict.has_value()) {
+				log_error("Table name {} is ambiguous across attached schemas", table);
+				return std::nullopt;
+			}
+			strict = sqlite3_column_int(stmt, 5) != 0;
 		}
 	}
 	if(rc != SQLITE_DONE) {
 		log_error("Failed to inspect table mode: {}", sqlite3_errmsg(db));
 	}
-	return std::nullopt;
-}
-
-static std::optional<std::string> first_insertable_any_column(sqlite3 *db, const std::string &table) {
-	auto sql = std::format("PRAGMA table_xinfo({})", quote_identifier(table));
-	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
-	if(sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-		log_error("Failed to inspect table column types: {}", sqlite3_errmsg(db));
-		return std::nullopt;
-	}
-
-	int rc;
-	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-		const auto hidden = sqlite3_column_int(stmt, 6);
-		const auto type = sqlite3_column_string(stmt, 2);
-		if(hidden == 0 && identifier_equal_ascii(type, "ANY")) {
-			return sqlite3_column_string(stmt, 1);
-		}
-	}
-	if(rc != SQLITE_DONE) {
-		log_error("Failed to inspect table column types: {}", sqlite3_errmsg(db));
-		return std::nullopt;
-	}
-	return std::string{};
+	return strict;
 }
 
 static std::vector<size_t> remove_non_insertable_columns(
 	std::vector<std::string> &header,
-	const std::vector<std::string> &insertableColumns
+	const std::vector<ColumnInfo> &insertableColumns
 ) {
 	std::vector<size_t> removed;
 	for(size_t i = 0; i < header.size(); i++) {
-		if(std::ranges::find(insertableColumns, header[i]) == insertableColumns.end()) {
+		auto column = std::ranges::find_if(insertableColumns, [&](const ColumnInfo &candidate) {
+			return identifier_equal_ascii(candidate.name, header[i]);
+		});
+		if(column == insertableColumns.end()) {
 			removed.push_back(i);
 			header.erase(header.begin() + i);
 			i--;
+		} else {
+			// Use the spelling from SQLite when constructing the INSERT statement.
+			header[i] = column->name;
 		}
 	}
 	return removed;
+}
+
+static const ColumnInfo *find_column(
+	const std::vector<ColumnInfo> &columns,
+	std::string_view name
+) {
+	auto column = std::ranges::find_if(columns, [&](const ColumnInfo &candidate) {
+		return identifier_equal_ascii(candidate.name, name);
+	});
+	return column == columns.end() ? nullptr : &*column;
+}
+
+static bool has_duplicate_columns(const std::vector<std::string> &columns) {
+	for(size_t i = 0; i < columns.size(); ++i) {
+		for(size_t j = i + 1; j < columns.size(); ++j) {
+			if(identifier_equal_ascii(columns[i], columns[j])) return true;
+		}
+	}
+	return false;
 }
 
 static void remove_columns(std::vector<std::string> &row, const std::vector<size_t> &columns) {
@@ -344,19 +401,6 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 		log_error("Could not determine whether table {} is STRICT", table);
 		return false;
 	}
-	const auto anyColumn = first_insertable_any_column(db, table);
-	if(!anyColumn.has_value()) {
-		return false;
-	}
-	if(!anyColumn->empty()) {
-		log_error(
-			"Cannot safely import column {}.{} with type ANY in a {} table: "
-			"the original SQLite storage class is not encoded",
-			table, *anyColumn, *strict ? "STRICT" : "non-STRICT"
-		);
-		return false;
-	}
-
 	const auto insertableColumns = insertable_columns(db, table);
 	if(insertableColumns.empty()) {
 		log_error("No insertable columns found for table {}", table);
@@ -372,7 +416,10 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 	int lineIdx = -1;
 	std::string line;
 	std::vector<std::string> header;
+	std::vector<std::string> columnTypes;
 	std::vector<size_t> ignoredColumns;
+	size_t sourceColumnCount = 0;
+	SQLITE_FINALIZE sqlite3_stmt *insertStmt = nullptr;
 	bool sawHeader = false;
 	while(std::getline(in, line)) {
 		if(!line.empty() && line.back() == '\r') {
@@ -385,15 +432,41 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 			for(auto &column : header) {
 				column = unescape_field(column);
 			}
+			if(has_duplicate_columns(header)) {
+				log_error("Table import header contains duplicate column names");
+				return false;
+			}
+			sourceColumnCount = header.size();
 			ignoredColumns = remove_non_insertable_columns(header, insertableColumns);
 			if(header.empty()) {
 				log_error("Table import header contains no insertable columns");
 				return false;
 			}
+			for(const auto &name : header) {
+				const auto *column = find_column(insertableColumns, name);
+				if(!column) return false;
+				if(identifier_equal_ascii(column->type, "ANY")) {
+					log_error(
+						"Cannot safely import column {}.{} with type ANY in a {} table: "
+						"the original SQLite storage class is not encoded",
+						table, column->name, *strict ? "STRICT" : "non-STRICT"
+					);
+					return false;
+				}
+				columnTypes.push_back(column->type);
+			}
+			if(!prepare_insert(db, table, header, &insertStmt)) return false;
 			continue;
 		}
 
 		auto rowVec = split_fields(line);
+		if(sourceColumnCount != rowVec.size()) {
+			log_error(
+				"Column count mismatch on row {}: expected {}, got {}",
+				lineIdx + 1, sourceColumnCount, rowVec.size()
+			);
+			return false;
+		}
 		remove_columns(rowVec, ignoredColumns);
 		if(header.size() != rowVec.size()) {
 			log_error(
@@ -403,13 +476,13 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 			return false;
 		}
 
-		auto decoded = decode_fields(rowVec);
+		auto decoded = decode_fields(rowVec, columnTypes);
 		if(!decoded) {
 			log_error("Invalid encoded field on row {}", lineIdx + 1);
 			return false;
 		}
 
-		if(!insert_row(db, table, header, *decoded)) {
+		if(!insert_row(db, insertStmt, *decoded)) {
 			log_error("Failed to import row {}", lineIdx + 1);
 			return false;
 		}
