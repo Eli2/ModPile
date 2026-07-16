@@ -48,6 +48,48 @@ static size_t curlwritefunction(std::byte *data, size_t size, size_t nmemb, void
 	return realsize;
 }
 
+static int curl_progress(void *clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+	auto *abort = static_cast<std::atomic_bool*>(clientp);
+	return abort->load() ? 1 : 0;
+}
+
+static void configure_transfer(CURL *curl, TaskControl &tc) {
+	// libcurl disables progress callbacks by default. Enable them so task_quit()
+	// can interrupt a transfer through TaskControl::abort instead of waiting for
+	// the remote server to finish or disconnect.
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_progress);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &tc.abort);
+
+	// Bound DNS lookup and connection establishment. These phases may not call
+	// the progress callback frequently on every resolver/backend, so cancellation
+	// alone is not sufficient to guarantee prompt shutdown.
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10'000L);
+
+	// Do not impose a total timeout: Modland modules and the index can be large.
+	// Instead, fail only when a connection makes effectively no progress for 30
+	// seconds, preventing a silent peer from holding the task thread forever.
+	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+
+	// Avoid process-wide signals for timeout handling. Transfers run on the task
+	// worker thread, and signal-based timeouts are unsafe in multithreaded code.
+	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+}
+
+static bool perform_transfer(CURL *curl, TaskControl &tc) {
+	const CURLcode result = curl_easy_perform(curl);
+	if(result == CURLE_ABORTED_BY_CALLBACK || tc.abort.load()) {
+		log_debug("Download aborted");
+		return false;
+	}
+	if(result != CURLE_OK) {
+		log_error("curl_easy_perform() failed: {}", curl_easy_strerror(result));
+		return false;
+	}
+	return true;
+}
+
 
 struct ModlandRow {
 	std::string md5;
@@ -104,14 +146,16 @@ static bool deleteOldModlandData(sqlite3* db) {
 	return true;
 }
 
-static bool parseFile(sqlite3* db, std::vector<char> &allData) {
+static bool parseFile(TaskControl &tc, sqlite3* db, std::vector<char> &allData) {
 	log_debug("Parsing file");
 	std::string_view sv = std::string_view(allData.begin(), allData.end());
 	bool ok = true;
 	
 	split(sv, "\n", [&](std::string_view line) {
-		if(!ok)
+		if(!ok || tc.abort) {
+			ok = false;
 			return;
+		}
 
 		auto [md5, path] = split_first(line, ' ');
 		if(md5.empty() || path.empty())
@@ -151,7 +195,7 @@ static bool parseFile(sqlite3* db, std::vector<char> &allData) {
 	return ok;
 }
 
-static void readArchive(sqlite3* db, const std::span<std::byte> data) {
+static void readArchive(TaskControl &tc, sqlite3* db, const std::span<std::byte> data) {
 	log_debug("Loading archive");
 	
 	ARCHIVE_CLEAN archive *inner = archive_read_new();
@@ -166,6 +210,10 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 	
 	archive_entry *entry;
 	while(archive_read_next_header(inner, &entry) == ARCHIVE_OK) {
+		if(tc.abort) {
+			log_debug("Archive processing aborted");
+			return;
+		}
 		auto entryName = archive_entry_pathname_utf8(entry);
 		if(!entryName) {
 			log_error("Null file name in archive");
@@ -182,6 +230,10 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 		bool readOk = true;
 		std::vector<char> allData;
 		for(;;) {
+			if(tc.abort) {
+				readOk = false;
+				break;
+			}
 			std::array<char, 1024 * 8> buffer;
 			la_ssize_t size = archive_read_data(inner, buffer.data(), buffer.size());
 			if(size == 0) {
@@ -212,7 +264,7 @@ static void readArchive(sqlite3* db, const std::span<std::byte> data) {
 			if(!deleteOldModlandData(db)) {
 				break;
 			}
-			if(!parseFile(db, allData)) {
+			if(!parseFile(tc, db, allData)) {
 				break;
 			}
 
@@ -254,24 +306,14 @@ void modland_update_index(TaskControl &tc, sqlite3* db) {
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlwritefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
-	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, +[](void *clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
-		return *static_cast<std::atomic_bool*>(clientp) ? 1 : 0;
-	});
-	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &tc.abort);
+	configure_transfer(curl, tc);
 
 	log_debug("Downloading: {}", url);
-	CURLcode res = curl_easy_perform(curl);
-	if(res == CURLE_ABORTED_BY_CALLBACK) {
-		log_debug("Download aborted");
-		return;
-	}
-	if(res != CURLE_OK) {
-		log_error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
+	if(!perform_transfer(curl, tc)) {
 		return;
 	}
 
-	readArchive(db, result);
+	readArchive(tc, db, result);
 	log_debug("DONE");
 }
 
@@ -382,10 +424,10 @@ void modland_probe_formats(TaskControl &tc, sqlite3* db) {
 		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlwritefunction);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
+		configure_transfer(curl, tc);
 
-		CURLcode res = curl_easy_perform(curl);
-		if(res != CURLE_OK) {
-			log_error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
+		if(!perform_transfer(curl, tc)) {
+			if(tc.abort) break;
 			continue;
 		}
 
@@ -442,7 +484,7 @@ static void markBadFile(sqlite3* db, std::string md5) {
 	
 }
 
-static void downloadFile(sqlite3* db, std::string path, std::string md5) {
+static void downloadFile(TaskControl &tc, sqlite3* db, std::string path, std::string md5) {
 	auto fileName = str_split(path, "/").back();
 	
 	CURL * curl = curl_easy_init();
@@ -464,11 +506,10 @@ static void downloadFile(sqlite3* db, std::string path, std::string md5) {
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlwritefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
+	configure_transfer(curl, tc);
 
 	log_debug("Downloading: {} from {}", fileName, url);
-	CURLcode res = curl_easy_perform(curl);
-	if(res != CURLE_OK) {
-		log_error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
+	if(!perform_transfer(curl, tc)) {
 		return;
 	}
 	log_debug("Download Done");
@@ -544,6 +585,6 @@ void modland_download(TaskControl &tc, sqlite3* db) {
 		
 		tc.statusline.set(std::format("{}/{}", i, toDownload.size()));
 		tc.statusline2.set(std::format("Downloading: {}", toDl.path));
-		downloadFile(db, toDl.path, toDl.md5);
+		downloadFile(tc, db, toDl.path, toDl.md5);
 	}
 }
