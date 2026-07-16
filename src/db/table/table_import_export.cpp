@@ -235,6 +235,14 @@ static std::optional<std::vector<FieldValue>> decode_fields(
 	return decoded;
 }
 
+static bool validate_encoded_field(std::string_view field) {
+	if(field == "\\N") return true;
+	if(field.starts_with("\\B")) {
+		return base64_decode(field.substr(2)).has_value();
+	}
+	return unescape_field(field).has_value();
+}
+
 struct ColumnInfo {
 	std::string name;
 	std::string type;
@@ -341,6 +349,15 @@ static void remove_columns(std::vector<std::string> &row, const std::vector<size
 			row.erase(row.begin() + *it);
 		}
 	}
+}
+
+static bool validate_columns(
+	const std::vector<std::string> &row,
+	const std::vector<size_t> &columns
+) {
+	return std::ranges::all_of(columns, [&](size_t column) {
+		return column < row.size() && validate_encoded_field(row[column]);
+	});
 }
 
 bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
@@ -501,6 +518,10 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 				"Column count mismatch on row {}: expected {}, got {}",
 				lineIdx + 1, sourceColumnCount, rowVec.size()
 			);
+			return false;
+		}
+		if(!validate_columns(rowVec, ignoredColumns)) {
+			log_error("Invalid encoded field in an ignored column on row {}", lineIdx + 1);
 			return false;
 		}
 		remove_columns(rowVec, ignoredColumns);

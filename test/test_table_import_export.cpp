@@ -329,6 +329,27 @@ TEST_CASE("table import validates fields ignored by the destination schema", "[d
 	sqlite3_close(db);
 }
 
+TEST_CASE("table import validates encoding in ignored columns", "[db][table]") {
+	for(const auto *value : {"bad\\q", "bad\\", "\\Bnot-base64!"}) {
+		DYNAMIC_SECTION("ignored value: " << value) {
+			sqlite3 *db = open_memory_db();
+			REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
+				nullptr, nullptr, nullptr) == SQLITE_OK);
+
+			std::istringstream in(std::string("id\tfuture\ngood\tvalid\nbad\t") + value + "\n");
+			CHECK_FALSE(db_import_table(db, "sample", in));
+
+			sqlite3_stmt *count = nullptr;
+			REQUIRE(sqlite3_prepare_v2(db,
+				"SELECT COUNT(*) FROM sample", -1, &count, nullptr) == SQLITE_OK);
+			REQUIRE(sqlite3_step(count) == SQLITE_ROW);
+			CHECK(sqlite3_column_int(count, 0) == 0);
+			sqlite3_finalize(count);
+			sqlite3_close(db);
+		}
+	}
+}
+
 TEST_CASE("table import rejects duplicate column names", "[db][table]") {
 	sqlite3 *db = open_memory_db();
 	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
