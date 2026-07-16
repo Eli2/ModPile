@@ -82,18 +82,20 @@ bool populate_for_export(sqlite3 *db, size_t rows, size_t blobBytes) {
 	return sqlite3_exec(db, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+bool import_once(std::string_view input) {
+	sqlite3 *db = create_benchmark_db();
+	if(!db) return false;
+	std::istringstream stream{std::string(input)};
+	const bool imported = db_import_table(db, "sample", stream);
+	sqlite3_close(db);
+	return imported;
+}
+
 void benchmark_import(Catch::Benchmark::Chronometer meter, std::string_view input) {
 	// Catch2 may invoke the measured callable repeatedly. Each iteration needs a
 	// fresh table, so database creation is included in the end-to-end import
 	// measurement. The fixed cost is exposed by the 1k/10k scaling comparison.
-	meter.measure([&] {
-		sqlite3 *db = create_benchmark_db();
-		if(!db) return false;
-		std::istringstream stream{std::string(input)};
-		const bool imported = db_import_table(db, "sample", stream);
-		sqlite3_close(db);
-		return imported;
-	});
+	meter.measure([&] { return import_once(input); });
 }
 
 void benchmark_export(Catch::Benchmark::Chronometer meter, size_t rows, size_t blobBytes) {
@@ -172,5 +174,39 @@ TEST_CASE("generic table import export performance", "[!benchmark][db][table]") 
 	};
 	BENCHMARK_ADVANCED("export 1,000 1-KiB blobs")(Catch::Benchmark::Chronometer meter) {
 		benchmark_export(meter, 1'000, 1'024);
+	};
+}
+
+TEST_CASE("profile generic table import at one million rows",
+	"[!benchmark][db][table][perf-import]") {
+	const auto text1m = make_text_import(1'000'000);
+	BENCHMARK_ADVANCED("import 1,000,000 text rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_import(meter, text1m);
+	};
+}
+
+TEST_CASE("profile generic table import cache behavior",
+	"[!benchmark][db][table][cachegrind-import]") {
+	const auto text100k = make_text_import(100'000);
+	REQUIRE(import_once(text100k));
+}
+
+TEST_CASE("profile one generic table import without benchmark overhead",
+	"[!benchmark][db][table][perf-import-direct]") {
+	const auto text1m = make_text_import(1'000'000);
+	REQUIRE(import_once(text1m));
+}
+
+TEST_CASE("profile raw SQLite insert at one million rows",
+	"[!benchmark][db][table][perf-sqlite]") {
+	BENCHMARK_ADVANCED("raw SQLite insert 1,000,000 rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_raw_sqlite_insert(meter, 1'000'000);
+	};
+}
+
+TEST_CASE("profile generic table export at one million rows",
+	"[!benchmark][db][table][perf-export]") {
+	BENCHMARK_ADVANCED("export 1,000,000 text rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_export(meter, 1'000'000, 0);
 	};
 }
