@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <format>
 #include <istream>
@@ -206,6 +207,9 @@ static bool bind_encoded_field(
 		double value = 0.0;
 		const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
 		if(error == std::errc{} && end == text.data() + text.size()) {
+			// SQLite represents a bound NaN as SQL NULL. Reject it instead of
+			// silently changing the imported value's type and meaning.
+			if(std::isnan(value)) return false;
 			return sqlite3_bind_double(stmt, parameter, value) == SQLITE_OK;
 		}
 	}

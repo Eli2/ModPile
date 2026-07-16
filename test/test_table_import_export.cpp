@@ -443,6 +443,22 @@ TEST_CASE("table import export preserves real infinities", "[db][table]") {
 	sqlite3_close(db);
 }
 
+TEST_CASE("table import rejects NaN instead of converting it to NULL", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (value REAL) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("value\nnan\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *select = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "SELECT count(*) FROM sample", -1, &select, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(select) == SQLITE_ROW);
+	CHECK(sqlite3_column_int64(select, 0) == 0);
+	sqlite3_finalize(select);
+	sqlite3_close(db);
+}
+
 TEST_CASE("table import rejects empty input", "[db][table]") {
 	sqlite3 *db = open_memory_db();
 	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
