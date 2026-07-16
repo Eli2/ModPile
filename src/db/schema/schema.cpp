@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 
 #include <sqlite3.h>
@@ -109,6 +110,16 @@ bool db_migrate(sqlite3 *db) {
 
 	const auto version = current_version(db);
 	if(!version.has_value()) {
+		return false;
+	}
+
+	const auto latest_supported_version = kMigrations[std::size(kMigrations) - 1].version;
+	if(version.value() > latest_supported_version) {
+		log_error(
+			"Database schema V{} is newer than the latest supported version V{}",
+			version.value(),
+			latest_supported_version
+		);
 		return false;
 	}
 

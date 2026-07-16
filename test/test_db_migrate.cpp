@@ -204,3 +204,34 @@ TEST_CASE("db_migrate aborts when schema_migration version cannot be read", "[db
 
 	sqlite3_close(db);
 }
+
+TEST_CASE("db_migrate rejects a database from a newer application version", "[db][migration]") {
+	sqlite3 *db = open_memory_db();
+
+	REQUIRE(sqlite3_exec(db, R"(
+		CREATE TABLE schema_migration (
+			version        INTEGER PRIMARY KEY NOT NULL,
+			description    TEXT                NOT NULL,
+			installed_on   INTEGER             NOT NULL,
+			execution_ms   INTEGER             NOT NULL,
+			success        INTEGER             NOT NULL
+		);
+		INSERT INTO schema_migration(version, description, installed_on, execution_ms, success)
+		VALUES(999, 'Future schema', 0, 0, 1);
+	)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	CHECK_FALSE(db_migrate(db));
+	CHECK(migration_count(db) == 1);
+
+	// Rejecting the database must happen before this binary applies or creates
+	// any of its own schema objects.
+	sqlite3_stmt *stmt = nullptr;
+	sqlite3_prepare_v2(db,
+		"SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'file'",
+		-1, &stmt, nullptr);
+	REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+	CHECK(sqlite3_column_int(stmt, 0) == 0);
+	sqlite3_finalize(stmt);
+
+	sqlite3_close(db);
+}
