@@ -343,7 +343,31 @@ TEST_CASE("table import rejects ambiguous table names across schemas", "[db][tab
 
 	std::istringstream in("id\nrow\n");
 	CHECK_FALSE(db_import_table(db, "sample", in));
+	std::ostringstream out;
+	CHECK_FALSE(db_export_table(db, "sample", out));
 	sqlite3_close(db);
+}
+
+TEST_CASE("table export requires a strict table with concrete declared types", "[db][table]") {
+	SECTION("non-STRICT table") {
+		sqlite3 *db = open_memory_db();
+		REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (value TEXT)",
+			nullptr, nullptr, nullptr) == SQLITE_OK);
+		std::ostringstream out;
+		CHECK_FALSE(db_export_table(db, "sample", out));
+		CHECK(out.str().empty());
+		sqlite3_close(db);
+	}
+
+	SECTION("STRICT ANY column") {
+		sqlite3 *db = open_memory_db();
+		REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (value ANY) STRICT",
+			nullptr, nullptr, nullptr) == SQLITE_OK);
+		std::ostringstream out;
+		CHECK_FALSE(db_export_table(db, "sample", out));
+		CHECK(out.str().empty());
+		sqlite3_close(db);
+	}
 }
 
 TEST_CASE("table import export preserves real infinities", "[db][table]") {

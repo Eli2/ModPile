@@ -338,6 +338,30 @@ static void remove_columns(std::vector<std::string> &row, const std::vector<size
 
 bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	log_debug("Exporting table {}", table);
+	const auto strict = table_is_strict(db, table);
+	if(!strict.has_value()) {
+		log_error("Could not uniquely resolve table {}", table);
+		return false;
+	}
+	if(!*strict) {
+		log_error("Cannot safely export non-STRICT table {}", table);
+		return false;
+	}
+
+	const auto columns = insertable_columns(db, table);
+	if(columns.empty()) {
+		log_error("No insertable columns found for table {}", table);
+		return false;
+	}
+	for(const auto &column : columns) {
+		if(column.type.empty() || identifier_equal_ascii(column.type, "ANY")) {
+			log_error(
+				"Cannot safely export column {}.{} without a concrete declared type",
+				table, column.name
+			);
+			return false;
+		}
+	}
 
 	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
 	auto sql = std::format("SELECT * FROM {}", quote_identifier(table));
