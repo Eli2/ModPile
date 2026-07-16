@@ -296,6 +296,10 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 		out << escape_field(sqlite3_column_name(stmt, i));
 	}
 	out << '\n';
+	if(!out) {
+		log_error("Failed to write table header");
+		return false;
+	}
 
 	int rc;
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
@@ -320,6 +324,10 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 			}
 		}
 		out << '\n';
+		if(!out) {
+			log_error("Failed to write table row");
+			return false;
+		}
 	}
 	if(rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
@@ -365,25 +373,34 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 	std::string line;
 	std::vector<std::string> header;
 	std::vector<size_t> ignoredColumns;
+	bool sawHeader = false;
 	while(std::getline(in, line)) {
 		if(!line.empty() && line.back() == '\r') {
 			line.pop_back();
 		}
 		lineIdx++;
 		if(lineIdx == 0) {
+			sawHeader = true;
 			header = split_fields(line);
 			for(auto &column : header) {
 				column = unescape_field(column);
 			}
 			ignoredColumns = remove_non_insertable_columns(header, insertableColumns);
+			if(header.empty()) {
+				log_error("Table import header contains no insertable columns");
+				return false;
+			}
 			continue;
 		}
 
 		auto rowVec = split_fields(line);
 		remove_columns(rowVec, ignoredColumns);
 		if(header.size() != rowVec.size()) {
-			log_debug("Column count mismatch in file");
-			continue;
+			log_error(
+				"Column count mismatch on row {}: expected {}, got {}",
+				lineIdx + 1, header.size(), rowVec.size()
+			);
+			return false;
 		}
 
 		auto decoded = decode_fields(rowVec);
@@ -396,6 +413,15 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 			log_error("Failed to import row {}", lineIdx + 1);
 			return false;
 		}
+	}
+
+	if(in.bad() || (in.fail() && !in.eof())) {
+		log_error("Failed while reading table import stream");
+		return false;
+	}
+	if(!sawHeader) {
+		log_error("Table import is empty and has no header");
+		return false;
 	}
 
 	if(!transaction.commit()) {

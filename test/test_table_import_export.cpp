@@ -269,3 +269,44 @@ TEST_CASE("table import export escapes column names", "[db][table]") {
 
 	sqlite3_close(db);
 }
+
+TEST_CASE("table import rolls back on a malformed row", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT, value TEXT) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\tvalue\ngood\tfirst\nbad\nnext\tthird\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *count = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM sample", -1, &count, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(count) == SQLITE_ROW);
+	CHECK(sqlite3_column_int(count, 0) == 0);
+	sqlite3_finalize(count);
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import rejects empty input", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in;
+	CHECK_FALSE(db_import_table(db, "sample", in));
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import and export propagate stream errors", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\nrow\n");
+	in.setstate(std::ios::badbit);
+	CHECK_FALSE(db_import_table(db, "sample", in));
+
+	std::ostringstream out;
+	out.setstate(std::ios::badbit);
+	CHECK_FALSE(db_export_table(db, "sample", out));
+	sqlite3_close(db);
+}
