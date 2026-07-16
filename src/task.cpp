@@ -173,6 +173,15 @@ static queue<Tasks>     g_taskQueue;
 static std::thread      g_taskThread;
 static TaskControl      g_taskControl;
 static LockedString     g_currentTaskName;
+static std::mutex       g_taskLifecycleMutex;
+static bool             g_taskAccepting = false;
+
+static void enqueue_task(Tasks task) {
+	std::lock_guard lock(g_taskLifecycleMutex);
+	if(g_taskAccepting) {
+		g_taskQueue.push(task);
+	}
+}
 
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 
@@ -194,7 +203,12 @@ static std::string task_name(const Tasks &task) {
 }
 
 void task_init(AppState &app) {
-	
+	{
+		std::lock_guard lock(g_taskLifecycleMutex);
+		g_taskQueue.clear();
+		g_taskAccepting = false;
+	}
+
 	g_taskThread = thread_create("db_task", [&](){
 		SQLITE_CLOSE sqlite3* db = db_open(app);
 		if(!db) {
@@ -274,11 +288,21 @@ void task_init(AppState &app) {
 			}
 		}
 	});
+
+	{
+		std::lock_guard lock(g_taskLifecycleMutex);
+		g_taskAccepting = true;
+	}
 }
 
 void task_quit(AppState &app) {
-	g_taskQueue.push(Poison());
 	g_taskControl.abort = true;
+	{
+		std::lock_guard lock(g_taskLifecycleMutex);
+		g_taskAccepting = false;
+		g_taskQueue.clear();
+		g_taskQueue.push(Poison());
+	}
 	if(g_taskThread.joinable())
 		g_taskThread.join();
 }
@@ -312,40 +336,40 @@ void task_remove_queued(size_t index) {
 void task_load(std::filesystem::path path) {
 	Load l;
 	l.path = path;
-	g_taskQueue.push(l);
+	enqueue_task(std::move(l));
 }
 
 void task_analyze() {
-	g_taskQueue.push(Analyze());
+	enqueue_task(Analyze());
 }
 
 void task_update_fulltext_search() {
-	g_taskQueue.push(UpdateFulltextSearchIndex());
+	enqueue_task(UpdateFulltextSearchIndex());
 }
 
 void task_mark_tracks_for_analysis() {
-	g_taskQueue.push(MarkTracksForAnalysis());
+	enqueue_task(MarkTracksForAnalysis());
 }
 
 
 void task_pull_modland_file_names() {
-	g_taskQueue.push(ModlandPullFilenames());
+	enqueue_task(ModlandPullFilenames());
 }
 
 void task_pull_modland_list_supported_formats() {
-	g_taskQueue.push(ModlandListSupportedFormats());
+	enqueue_task(ModlandListSupportedFormats());
 }
 
 void task_modland_download_missing_files() {
-	g_taskQueue.push(ModlandDownloadMissingFiles());
+	enqueue_task(ModlandDownloadMissingFiles());
 }
 
 void task_import_play(std::filesystem::path path) {
-	g_taskQueue.push(ImportPlay(path));
+	enqueue_task(ImportPlay(std::move(path)));
 }
 
 void task_export_play(std::filesystem::path path) {
-	g_taskQueue.push(ExportPlay(std::move(path)));
+	enqueue_task(ExportPlay(std::move(path)));
 }
 
 void task_export_playlist(
@@ -357,9 +381,9 @@ void task_export_playlist(
 	ep.directory = std::move(directory);
 	ep.playlist_name = std::move(playlist_name);
 	ep.tracks = std::move(tracks);
-	g_taskQueue.push(std::move(ep));
+	enqueue_task(std::move(ep));
 }
 
 void task_vacuum_into(std::filesystem::path path) {
-	g_taskQueue.push(VacuumInto{std::move(path)});
+	enqueue_task(VacuumInto{std::move(path)});
 }

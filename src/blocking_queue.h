@@ -40,4 +40,8 @@ public:
 		d_queue.erase(d_queue.end() - 1 - static_cast<std::ptrdiff_t>(index));
 		return true;
 	}
+	void clear() {
+		std::lock_guard<std::mutex> lock(d_mutex);
+		d_queue.clear();
+	}
 };

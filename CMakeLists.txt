@@ -431,6 +431,7 @@ add_executable(ModPileTest
 	src/task/import.cpp
 
 	test/test_hash_util.cpp
+	test/test_blocking_queue.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
 	test/test_playstats_import_export.cpp
