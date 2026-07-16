@@ -22,6 +22,25 @@ void gui_config(AppState &app) {
 	ImGui::End();
 }
 
+static void gui_progress_bar_left(float fraction, const std::string &overlay) {
+	// ImGui's ProgressBar positions custom text immediately after the filled
+	// portion, so the label moves on every update. Draw it ourselves at a fixed
+	// inset instead.
+	ImGui::ProgressBar(fraction, ImVec2(-1, 0), "");
+	const auto barMin = ImGui::GetItemRectMin();
+	const auto barMax = ImGui::GetItemRectMax();
+	const auto textSize = ImGui::CalcTextSize(overlay.c_str());
+	const auto &style = ImGui::GetStyle();
+	const ImVec2 textPosition(
+		barMin.x + style.FramePadding.x,
+		barMin.y + (barMax.y - barMin.y - textSize.y) * 0.5f
+	);
+	auto *drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRect(barMin, barMax, true);
+	drawList->AddText(textPosition, ImGui::GetColorU32(ImGuiCol_Text), overlay.c_str());
+	drawList->PopClipRect();
+}
+
 static void gui_task_status_frame(const TaskStatusFrame &frame, int id) {
 	ImGui::PushID(id);
 	ImGui::TextUnformatted(frame.label.c_str());
@@ -37,7 +56,7 @@ static void gui_task_status_frame(const TaskStatusFrame &frame, int id) {
 		if(progress.total && *progress.total > 0) {
 			const auto fraction = static_cast<float>(progress.current) /
 				static_cast<float>(*progress.total);
-			ImGui::ProgressBar(std::clamp(fraction, 0.0f, 1.0f), ImVec2(-1, 0), overlay.c_str());
+			gui_progress_bar_left(std::clamp(fraction, 0.0f, 1.0f), overlay);
 		} else {
 			ImGui::TextDisabled("%s", overlay.c_str());
 		}
