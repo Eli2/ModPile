@@ -261,6 +261,8 @@ add_executable(ModPile
 	
 	${hash_util_srcs}
 	src/util/archive_util.h
+	src/util/coder/base64.h
+	src/util/coder/base64.cpp
 	src/util/curl_util.h
 	src/util/curl_util.cpp
 	src/util/defer_util.h
@@ -411,6 +413,8 @@ endif()
 
 add_executable(ModPileTest
 	${hash_util_srcs}
+	src/util/coder/base64.h
+	src/util/coder/base64.cpp
 	src/util/str_util.h
 	src/util/str_util.cpp
 	src/util/sqlite_util.h
@@ -437,6 +441,7 @@ add_executable(ModPileTest
 	src/db_common.cpp
 
 	test/test_hash_util.cpp
+	test/test_base64.cpp
 	test/test_blocking_queue.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp

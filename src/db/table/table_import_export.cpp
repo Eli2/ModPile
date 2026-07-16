@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "../../log.h"
+#include "../../util/coder/base64.h"
 #include "../../util/sqlite_util.h"
 #include "../../util/str_util.h"
 
@@ -28,11 +29,17 @@ static std::string quote_identifier(const std::string &identifier) {
 	return quoted;
 }
 
+struct FieldValue {
+	enum class Type { Text, Null, Blob };
+	Type type = Type::Text;
+	std::string data;
+};
+
 static bool insert_row(
 	sqlite3 *db,
 	const std::string &table,
 	const std::vector<std::string> &header,
-	const std::vector<std::optional<std::string>> &row
+	const std::vector<FieldValue> &row
 ) {
 	auto fields = str_join(header, ", ", quote_identifier);
 
@@ -60,7 +67,19 @@ static bool insert_row(
 	}
 
 	for(size_t i = 0; i < row.size(); i++) {
-		int r = sqliteu_bind_optional_string(stmt, i + 1, row[i]);
+		int r = SQLITE_OK;
+		switch(row[i].type) {
+		case FieldValue::Type::Text:
+			r = sqliteu_bind_string(stmt, i + 1, row[i].data);
+			break;
+		case FieldValue::Type::Null:
+			r = sqlite3_bind_null(stmt, i + 1);
+			break;
+		case FieldValue::Type::Blob:
+			r = sqlite3_bind_blob64(
+				stmt, i + 1, row[i].data.data(), row[i].data.size(), SQLITE_TRANSIENT);
+			break;
+		}
 		if(r != SQLITE_OK) {
 			log_error("bind failed: {}", sqlite3_errmsg(db));
 			return false;
@@ -139,17 +158,25 @@ static std::vector<std::string> split_fields(std::string_view line) {
 	return fields;
 }
 
-static std::vector<std::optional<std::string>> decode_fields(const std::vector<std::string> &row) {
-	std::vector<std::optional<std::string>> decoded;
+static std::optional<std::vector<FieldValue>> decode_fields(const std::vector<std::string> &row) {
+	std::vector<FieldValue> decoded;
 	decoded.reserve(row.size());
 	for(const auto &field : row) {
 		// PostgreSQL COPY text convention: \N represents SQL NULL. It is
 		// recognized before unescaping, so a literal "\N" (exported as "\\N")
 		// remains distinct from the sentinel.
 		if(field == "\\N") {
-			decoded.emplace_back(std::nullopt);
+			decoded.push_back({FieldValue::Type::Null, {}});
+		} else if(field.starts_with("\\B")) {
+			auto blob = base64_decode(std::string_view(field).substr(2));
+			if(!blob) return std::nullopt;
+			std::string blob_data;
+			if(!blob->empty()) {
+				blob_data.assign(reinterpret_cast<const char*>(blob->data()), blob->size());
+			}
+			decoded.push_back({FieldValue::Type::Blob, std::move(blob_data)});
 		} else {
-			decoded.emplace_back(unescape_field(field));
+			decoded.push_back({FieldValue::Type::Text, unescape_field(field)});
 		}
 	}
 	return decoded;
@@ -224,8 +251,16 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		for(int i = 0; i < ncols; i++) {
 			if(i > 0) out << '\t';
-			if(sqlite3_column_type(stmt, i) == SQLITE_NULL) {
+			const auto type = sqlite3_column_type(stmt, i);
+			if(type == SQLITE_NULL) {
 				out << "\\N";
+				continue;
+			}
+			if(type == SQLITE_BLOB) {
+				const auto *data = sqlite3_column_blob(stmt, i);
+				const auto size = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
+				out << "\\B" << base64_encode(
+					std::span(static_cast<const std::byte*>(data), size));
 				continue;
 			}
 			const auto *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
@@ -280,7 +315,13 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 			continue;
 		}
 
-		if(!insert_row(db, table, header, decode_fields(rowVec))) {
+		auto decoded = decode_fields(rowVec);
+		if(!decoded) {
+			log_error("Invalid encoded field on row {}", lineIdx + 1);
+			return false;
+		}
+
+		if(!insert_row(db, table, header, *decoded)) {
 			log_error("Failed to import row {}", lineIdx + 1);
 			return false;
 		}

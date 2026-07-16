@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
+#include <cstring>
 #include <sstream>
 #include <string>
 
@@ -148,6 +151,74 @@ TEST_CASE("table import export distinguishes null, empty, and literal null marke
 	CHECK(std::string(reinterpret_cast<const char*>(sqlite3_column_text(select, 1))) == "");
 	CHECK(std::string(reinterpret_cast<const char*>(sqlite3_column_text(select, 2))) == "\\N");
 	sqlite3_finalize(select);
+
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import export preserves blob fields", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, R"(
+		CREATE TABLE sample (
+			id         TEXT PRIMARY KEY NOT NULL,
+			data       BLOB NOT NULL,
+			empty_data BLOB NOT NULL,
+			marker     TEXT NOT NULL
+		) STRICT;
+	)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	constexpr std::array<std::byte, 6> data = {
+		std::byte{0x00}, std::byte{0x01}, std::byte{0x02},
+		std::byte{0xfd}, std::byte{0xfe}, std::byte{0xff}
+	};
+	sqlite3_stmt *insert = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db,
+		"INSERT INTO sample(id, data, empty_data, marker) VALUES('row', ?1, ?2, '\\BQUJD')",
+		-1, &insert, nullptr) == SQLITE_OK);
+	sqlite3_bind_blob(insert, 1, data.data(), data.size(), SQLITE_TRANSIENT);
+	const char empty_blob = 0;
+	sqlite3_bind_blob(insert, 2, &empty_blob, 0, SQLITE_TRANSIENT);
+	REQUIRE(sqlite3_step(insert) == SQLITE_DONE);
+	sqlite3_finalize(insert);
+
+	std::ostringstream out;
+	REQUIRE(db_export_table(db, "sample", out));
+	CHECK(out.str() ==
+		"id\tdata\tempty_data\tmarker\n"
+		"row\t\\BAAEC/f7/\t\\B\t\\\\BQUJD\n");
+
+	REQUIRE(sqlite3_exec(db, "DELETE FROM sample", nullptr, nullptr, nullptr) == SQLITE_OK);
+	std::istringstream in(out.str());
+	REQUIRE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *select = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db,
+		"SELECT data, empty_data, marker FROM sample WHERE id = 'row'",
+		-1, &select, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(select) == SQLITE_ROW);
+	REQUIRE(sqlite3_column_type(select, 0) == SQLITE_BLOB);
+	REQUIRE(sqlite3_column_bytes(select, 0) == static_cast<int>(data.size()));
+	CHECK(std::memcmp(sqlite3_column_blob(select, 0), data.data(), data.size()) == 0);
+	CHECK(sqlite3_column_type(select, 1) == SQLITE_BLOB);
+	CHECK(sqlite3_column_bytes(select, 1) == 0);
+	CHECK(std::string(reinterpret_cast<const char*>(sqlite3_column_text(select, 2))) == "\\BQUJD");
+	sqlite3_finalize(select);
+
+	sqlite3_close(db);
+}
+
+TEST_CASE("table import rejects malformed blob encoding", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE sample (id TEXT, data BLOB) STRICT",
+		nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::istringstream in("id\tdata\nrow\t\\Bnot-base64!\n");
+	CHECK_FALSE(db_import_table(db, "sample", in));
+
+	sqlite3_stmt *count = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM sample", -1, &count, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(count) == SQLITE_ROW);
+	CHECK(sqlite3_column_int(count, 0) == 0);
+	sqlite3_finalize(count);
 
 	sqlite3_close(db);
 }
