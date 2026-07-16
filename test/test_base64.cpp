@@ -72,3 +72,9 @@ TEST_CASE("base64 accepts valid padding forms", "[base64]") {
 	CHECK(as_string(*base64_decode("AAA=")) == std::string("\0\0", 2));
 	CHECK(as_string(*base64_decode("AAAA")) == std::string("\0\0\0", 3));
 }
+
+TEST_CASE("base64 encoding appends to an existing string", "[base64]") {
+	std::string encoded = "prefix:";
+	base64_encode_append(encoded, as_bytes("foobar"));
+	CHECK(encoded == "prefix:Zm9vYmFy");
+}

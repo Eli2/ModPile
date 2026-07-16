@@ -64,7 +64,7 @@ static bool prepare_insert(
 	return true;
 }
 
-static void write_escaped_field(std::ostream &out, std::string_view field) {
+static void append_escaped_field(std::string &out, std::string_view field) {
 	size_t chunkStart = 0;
 	for(size_t i = 0; i < field.size(); ++i) {
 		std::string_view escape;
@@ -79,11 +79,31 @@ static void write_escaped_field(std::ostream &out, std::string_view field) {
 		case '\v': escape = "\\v";  break;
 		default: continue;
 		}
-		out.write(field.data() + chunkStart, i - chunkStart);
-		out.write(escape.data(), escape.size());
+		out.append(field.data() + chunkStart, i - chunkStart);
+		out.append(escape);
 		chunkStart = i + 1;
 	}
-	out.write(field.data() + chunkStart, field.size() - chunkStart);
+	out.append(field.data() + chunkStart, field.size() - chunkStart);
+}
+
+static bool identifier_equal_ascii(std::string_view lhs, std::string_view rhs);
+
+static bool flush_output(std::ostream &out, std::string &buffer) {
+	if(buffer.empty()) return true;
+	out.write(buffer.data(), buffer.size());
+	buffer.clear();
+	return static_cast<bool>(out);
+}
+
+enum class ExportType { Text, Integer, Real, Blob, Dynamic };
+
+static ExportType export_type(const char *declaredType) {
+	if(!declaredType) return ExportType::Dynamic;
+	if(identifier_equal_ascii(declaredType, "TEXT")) return ExportType::Text;
+	if(identifier_equal_ascii(declaredType, "INTEGER")) return ExportType::Integer;
+	if(identifier_equal_ascii(declaredType, "REAL")) return ExportType::Real;
+	if(identifier_equal_ascii(declaredType, "BLOB")) return ExportType::Blob;
+	return ExportType::Dynamic;
 }
 
 static bool unescape_field(std::string_view field, std::string &unescaped) {
@@ -131,8 +151,6 @@ static void split_fields(std::string_view line, std::vector<std::string_view> &f
 		pos = next + 1;
 	}
 }
-
-static bool identifier_equal_ascii(std::string_view lhs, std::string_view rhs);
 
 static bool validate_encoded_field(std::string_view field) {
 	if(field == "\\N") return true;
@@ -350,13 +368,21 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	}
 
 	int ncols = sqlite3_column_count(stmt);
+	std::vector<ExportType> exportTypes;
+	exportTypes.reserve(ncols);
+	for(int i = 0; i < ncols; ++i) {
+		exportTypes.push_back(export_type(sqlite3_column_decltype(stmt, i)));
+	}
+	constexpr size_t outputBufferSize = 64 * 1024;
+	std::string buffer;
+	buffer.reserve(outputBufferSize);
 
 	for(int i = 0; i < ncols; i++) {
-		if(i > 0) out << '\t';
-		write_escaped_field(out, sqlite3_column_name(stmt, i));
+		if(i > 0) buffer += '\t';
+		append_escaped_field(buffer, sqlite3_column_name(stmt, i));
 	}
-	out << '\n';
-	if(!out) {
+	buffer += '\n';
+	if(!flush_output(out, buffer)) {
 		log_error("Failed to write table header");
 		return false;
 	}
@@ -364,33 +390,72 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	int rc;
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		for(int i = 0; i < ncols; i++) {
-			if(i > 0) out << '\t';
-			const auto type = sqlite3_column_type(stmt, i);
-			if(type == SQLITE_NULL) {
-				out << "\\N";
+			if(i > 0) buffer += '\t';
+			const auto expectedType = exportTypes[i];
+			if(expectedType == ExportType::Integer || expectedType == ExportType::Real) {
+				const auto runtimeType = sqlite3_column_type(stmt, i);
+				if(runtimeType == SQLITE_NULL) {
+					buffer += "\\N";
+					continue;
+				}
+				char number[64];
+				std::to_chars_result converted;
+				if(expectedType == ExportType::Integer) {
+					converted = std::to_chars(
+						std::begin(number), std::end(number), sqlite3_column_int64(stmt, i));
+				} else {
+					converted = std::to_chars(
+						std::begin(number), std::end(number), sqlite3_column_double(stmt, i));
+				}
+				if(converted.ec != std::errc{}) {
+					log_error("Failed to format numeric value in column {}", i);
+					return false;
+				}
+				buffer.append(number, converted.ptr);
 				continue;
 			}
-			if(type == SQLITE_BLOB) {
-				const auto *data = sqlite3_column_blob(stmt, i);
-				const auto size = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
-				out << "\\B" << base64_encode(
-					std::span(static_cast<const std::byte*>(data), size));
-				continue;
+			if(expectedType == ExportType::Blob || expectedType == ExportType::Dynamic) {
+				const auto runtimeType = sqlite3_column_type(stmt, i);
+				if(runtimeType == SQLITE_NULL) {
+					buffer += "\\N";
+					continue;
+				}
+				if(runtimeType == SQLITE_BLOB) {
+					const auto *data = sqlite3_column_blob(stmt, i);
+					const auto size = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
+					buffer += "\\B";
+					base64_encode_append(
+						buffer, std::span(static_cast<const std::byte*>(data), size));
+					continue;
+				}
 			}
 			const auto *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-			if(val) {
-				const auto nbytes = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
-				write_escaped_field(out, std::string_view(val, nbytes));
+			if(!val) {
+				buffer += "\\N";
+				continue;
+			}
+			const auto nbytes = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
+			const std::string_view value(val, nbytes);
+			if(expectedType == ExportType::Text) {
+				append_escaped_field(buffer, value);
+			} else {
+				// Dynamic columns are only possible for generated values. Their
+				// runtime storage class is not represented by the declared type.
+				append_escaped_field(buffer, value);
 			}
 		}
-		out << '\n';
-		if(!out) {
+		buffer += '\n';
+		if(buffer.size() >= outputBufferSize && !flush_output(out, buffer)) {
 			log_error("Failed to write table row");
 			return false;
 		}
 	}
 	if(rc != SQLITE_DONE) {
 		log_error("step failed: {}", sqlite3_errmsg(db));
+		return false;
+	}
+	if(!flush_output(out, buffer)) {
+		log_error("Failed to write final table data");
 		return false;
 	}
 	return true;

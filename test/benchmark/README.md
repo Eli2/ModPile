@@ -99,6 +99,14 @@ L1-dcache-loads:u,L1-dcache-load-misses:u \
   ./build/ModPileTest '[perf-import-direct]'
 ```
 
+The equivalent writer workload performs three exports after preparing its
+database, which amortizes fixture setup:
+
+```bash
+perf stat -r 5 -e cycles:u,instructions:u,branches:u,branch-misses:u \
+  ./build/ModPileTest '[perf-export-direct]'
+```
+
 Useful ratios are:
 
 - IPC: `instructions / cycles`;

@@ -103,11 +103,15 @@ void benchmark_export(Catch::Benchmark::Chronometer meter, size_t rows, size_t b
 	REQUIRE(db != nullptr);
 	REQUIRE(populate_for_export(db, rows, blobBytes));
 	bool exported = false;
+	size_t exportedBytes = 0;
 	meter.measure([&] {
 		std::ostringstream stream;
 		exported = db_export_table(db, "sample", stream);
+		exportedBytes = stream.view().size();
+		return exportedBytes;
 	});
 	REQUIRE(exported);
+	REQUIRE(exportedBytes > 0);
 	sqlite3_close(db);
 }
 
@@ -209,4 +213,16 @@ TEST_CASE("profile generic table export at one million rows",
 	BENCHMARK_ADVANCED("export 1,000,000 text rows")(Catch::Benchmark::Chronometer meter) {
 		benchmark_export(meter, 1'000'000, 0);
 	};
+}
+
+TEST_CASE("profile generic table export without benchmark overhead",
+	"[!benchmark][db][table][perf-export-direct]") {
+	sqlite3 *db = create_benchmark_db();
+	REQUIRE(db != nullptr);
+	REQUIRE(populate_for_export(db, 1'000'000, 0));
+	for(int i = 0; i < 3; ++i) {
+		std::ostringstream stream;
+		REQUIRE(db_export_table(db, "sample", stream));
+	}
+	sqlite3_close(db);
 }

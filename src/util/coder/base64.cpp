@@ -23,18 +23,24 @@ const std::array<int8_t, 256> kDecodeValues = [] {
 
 std::string base64_encode(std::span<const std::byte> data) {
 	std::string encoded;
-	encoded.reserve(((data.size() + 2) / 3) * 4);
+	base64_encode_append(encoded, data);
+	return encoded;
+}
 
+void base64_encode_append(std::string &encoded, std::span<const std::byte> data) {
+	const auto oldSize = encoded.size();
+	const auto addedSize = ((data.size() + 2) / 3) * 4;
+	encoded.resize(oldSize + addedSize);
+	auto *out = encoded.data() + oldSize;
 	for(size_t i = 0; i < data.size(); i += 3) {
 		const uint32_t value = uint32_t(std::to_integer<uint8_t>(data[i])) << 16 |
 			(i + 1 < data.size() ? uint32_t(std::to_integer<uint8_t>(data[i + 1])) << 8 : 0) |
 			(i + 2 < data.size() ? uint32_t(std::to_integer<uint8_t>(data[i + 2])) : 0);
-		encoded += kAlphabet[(value >> 18) & 0x3f];
-		encoded += kAlphabet[(value >> 12) & 0x3f];
-		encoded += i + 1 < data.size() ? kAlphabet[(value >> 6) & 0x3f] : '=';
-		encoded += i + 2 < data.size() ? kAlphabet[value & 0x3f] : '=';
+		*out++ = kAlphabet[(value >> 18) & 0x3f];
+		*out++ = kAlphabet[(value >> 12) & 0x3f];
+		*out++ = i + 1 < data.size() ? kAlphabet[(value >> 6) & 0x3f] : '=';
+		*out++ = i + 2 < data.size() ? kAlphabet[value & 0x3f] : '=';
 	}
-	return encoded;
 }
 
 std::optional<std::vector<std::byte>> base64_decode(std::string_view encoded) {

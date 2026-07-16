@@ -11,4 +11,5 @@
 
 // RFC 4648 base64 with required padding and no embedded whitespace.
 std::string base64_encode(std::span<const std::byte> data);
+void base64_encode_append(std::string &out, std::span<const std::byte> data);
 std::optional<std::vector<std::byte>> base64_decode(std::string_view encoded);
