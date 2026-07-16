@@ -299,6 +299,7 @@ static std::optional<bool> table_is_strict(sqlite3 *db, const std::string &table
 	}
 	if(rc != SQLITE_DONE) {
 		log_error("Failed to inspect table mode: {}", sqlite3_errmsg(db));
+		return std::nullopt;
 	}
 	return strict;
 }
