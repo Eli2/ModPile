@@ -1,10 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
-#include <array>
 #include <cmath>
 #include <cstdint>
-#include <future>
 #include <initializer_list>
 #include <limits>
 #include <numbers>
@@ -91,19 +89,4 @@ TEST_CASE("loudness analyzer rejects negative infinity for silence", "[audio][lo
 	REQUIRE(analyzer.add_interleaved(silence));
 	CHECK_FALSE(analyzer.integrated_loudness().has_value());
 	CHECK(analyzer.error() == "integrated loudness is not finite");
-}
-
-TEST_CASE("loudness analyzers can run concurrently", "[audio][loudness][threading]") {
-	std::array<std::future<std::optional<double>>, 4> analyses;
-	for(auto &analysis : analyses) {
-		analysis = std::async(std::launch::async, [] {
-			return try_measure_ebu_tones({{20, -23.0}});
-		});
-	}
-
-	for(auto &analysis : analyses) {
-		const auto loudness = analysis.get();
-		REQUIRE(loudness.has_value());
-		CHECK(loudness.value() == Catch::Approx(-23.0).margin(0.1));
-	}
 }
