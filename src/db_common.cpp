@@ -4,6 +4,7 @@
 
 #include "util/hash_util.h"
 #include "util/sqlite_util.h"
+#include <limits>
 #include <span>
 #include <sqlite3.h>
 #include <vector>
@@ -15,6 +16,8 @@
 
 
 bool db_get_file(sqlite3 *db, const std::string id, FileRow &file) {
+	file = FileRow{};
+
 	auto sql = R"(
 		SELECT
 			file.id,
@@ -52,17 +55,50 @@ bool db_get_file(sqlite3 *db, const std::string id, FileRow &file) {
 	auto compData = sqlite3_column_blob(stmt, 3);
 	auto compSize = sqlite3_column_bytes(stmt, 3);
 
-	if(decompSize <= 0 || !compData) {
-		log_error("Invalid file blob for id {}: decompSize={} compData={}", id, decompSize, compData ? "ok" : "null");
+	if(compSize <= 0 || !compData) {
+		log_error(
+			"Invalid file blob for id {}: decompSize={} compSize={} compData={}",
+			id, decompSize, compSize, compData ? "ok" : "null"
+		);
 		return false;
 	}
 
-	file.rawData.resize(static_cast<size_t>(decompSize));
+	const auto frameSize = ZSTD_getFrameContentSize(compData, compSize);
+	if(frameSize == ZSTD_CONTENTSIZE_ERROR) {
+		log_error("Invalid Zstd frame for id {}", id);
+		file = FileRow{};
+		return false;
+	}
+
+	size_t capacity = 0;
+	if(frameSize != ZSTD_CONTENTSIZE_UNKNOWN) {
+		if(frameSize == 0 || frameSize > std::numeric_limits<size_t>::max()) {
+			log_error("Invalid Zstd frame size for id {}: {}", id, frameSize);
+			file = FileRow{};
+			return false;
+		}
+		capacity = static_cast<size_t>(frameSize);
+	} else {
+		// Frames without an embedded content size need the database value as an
+		// allocation hint. Frames written by ModPile normally include their size.
+		if(decompSize <= 0 || static_cast<uint64_t>(decompSize) > std::numeric_limits<size_t>::max()) {
+			log_error("Missing usable decompressed size for id {}: {}", id, decompSize);
+			file = FileRow{};
+			return false;
+		}
+		capacity = static_cast<size_t>(decompSize);
+	}
+
+	file.rawData.resize(capacity);
 	auto size = ZSTD_decompress(file.rawData.data(), file.rawData.size(), compData, compSize);
 	if(ZSTD_isError(size)) {
 		log_error("Failed to decompress: {} -> {}", id, ZSTD_getErrorName(size));
+		file = FileRow{};
 		return false;
 	}
+	// The compressed frame is authoritative. Discard any unused capacity from a
+	// stale or oversized database hint so callers never observe trailing bytes.
+	file.rawData.resize(size);
 	return true;
 }
 

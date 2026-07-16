@@ -419,6 +419,8 @@ add_executable(ModPileTest
 	src/util/xml_util.cpp
 	src/util/toml.h
 	src/util/toml.cpp
+	src/util/xmp_util.h
+	src/util/xmp_util.cpp
 	src/task_util.h
 	src/task_util.cpp
 	src/log.h
@@ -431,11 +433,14 @@ add_executable(ModPileTest
 	src/db/table/table_import_export.cpp
 	src/task/import.h
 	src/task/import.cpp
+	src/db_common.h
+	src/db_common.cpp
 
 	test/test_hash_util.cpp
 	test/test_blocking_queue.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
+	test/test_db_common.cpp
 	test/test_playstats_import_export.cpp
 	test/test_table_import_export.cpp
 	test/test_task_util.cpp
@@ -452,6 +457,16 @@ target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
 	SQLite::SQLite3
 )
+if(MODPILE_USE_SYSTEM_ZSTD)
+	target_link_libraries(ModPileTest PRIVATE zstd::libzstd_shared)
+else()
+	target_link_libraries(ModPileTest PRIVATE libzstd_static)
+endif()
+if(MODPILE_USE_SYSTEM_LIBXMP)
+	target_link_libraries(ModPileTest PRIVATE libxmp::xmp_shared)
+else()
+	target_link_libraries(ModPileTest PRIVATE libxmp::xmp_static)
+endif()
 
 include(CTest)
 include(Catch)
