@@ -114,6 +114,7 @@ void benchmark_export(Catch::Benchmark::Chronometer meter, size_t rows, size_t b
 TEST_CASE("generic table import export performance", "[!benchmark][db][table]") {
 	const auto text1k = make_text_import(1'000);
 	const auto text10k = make_text_import(10'000);
+	const auto text100k = make_text_import(100'000);
 	const auto blob1k = make_blob_import(1'000, 1'024);
 
 	BENCHMARK_ADVANCED("import 1,000 text rows")(Catch::Benchmark::Chronometer meter) {
@@ -121,6 +122,9 @@ TEST_CASE("generic table import export performance", "[!benchmark][db][table]") 
 	};
 	BENCHMARK_ADVANCED("import 10,000 text rows")(Catch::Benchmark::Chronometer meter) {
 		benchmark_import(meter, text10k);
+	};
+	BENCHMARK_ADVANCED("import 100,000 text rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_import(meter, text100k);
 	};
 	BENCHMARK_ADVANCED("import 1,000 768-byte blobs")(Catch::Benchmark::Chronometer meter) {
 		benchmark_import(meter, blob1k);
@@ -130,6 +134,9 @@ TEST_CASE("generic table import export performance", "[!benchmark][db][table]") 
 	};
 	BENCHMARK_ADVANCED("export 10,000 text rows")(Catch::Benchmark::Chronometer meter) {
 		benchmark_export(meter, 10'000, 0);
+	};
+	BENCHMARK_ADVANCED("export 100,000 text rows")(Catch::Benchmark::Chronometer meter) {
+		benchmark_export(meter, 100'000, 0);
 	};
 	BENCHMARK_ADVANCED("export 1,000 1-KiB blobs")(Catch::Benchmark::Chronometer meter) {
 		benchmark_export(meter, 1'000, 1'024);
