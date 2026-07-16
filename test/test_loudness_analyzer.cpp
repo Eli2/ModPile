@@ -1,11 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <future>
 #include <initializer_list>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <vector>
 
 #include "../src/audio/loudness_analyzer.h"
@@ -20,9 +23,10 @@ struct ToneSegment {
 	double peakDbfs;
 };
 
-static double measure_ebu_tones(std::initializer_list<ToneSegment> segments) {
+static std::optional<double> try_measure_ebu_tones(
+		std::initializer_list<ToneSegment> segments) {
 	LoudnessAnalyzer analyzer(kSampleRate, kChannels);
-	REQUIRE(analyzer.valid());
+	if(!analyzer.valid()) return std::nullopt;
 	std::vector<int16_t> oneSecond(kSampleRate * kChannels);
 
 	for(const auto segment : segments) {
@@ -35,13 +39,15 @@ static double measure_ebu_tones(std::initializer_list<ToneSegment> segments) {
 			oneSecond[frame * kChannels + 1] = sample;
 		}
 		for(uint32_t second = 0; second < segment.seconds; ++second) {
-			if(!analyzer.add_interleaved(oneSecond)) {
-				FAIL("failed to feed EBU reference tone: " << analyzer.error());
-			}
+			if(!analyzer.add_interleaved(oneSecond)) return std::nullopt;
 		}
 	}
 
-	const auto loudness = analyzer.integrated_loudness();
+	return analyzer.integrated_loudness();
+}
+
+static double measure_ebu_tones(std::initializer_list<ToneSegment> segments) {
+	const auto loudness = try_measure_ebu_tones(segments);
 	REQUIRE(loudness.has_value());
 	return loudness.value();
 }
@@ -85,4 +91,19 @@ TEST_CASE("loudness analyzer rejects negative infinity for silence", "[audio][lo
 	REQUIRE(analyzer.add_interleaved(silence));
 	CHECK_FALSE(analyzer.integrated_loudness().has_value());
 	CHECK(analyzer.error() == "integrated loudness is not finite");
+}
+
+TEST_CASE("loudness analyzers can run concurrently", "[audio][loudness][threading]") {
+	std::array<std::future<std::optional<double>>, 4> analyses;
+	for(auto &analysis : analyses) {
+		analysis = std::async(std::launch::async, [] {
+			return try_measure_ebu_tones({{20, -23.0}});
+		});
+	}
+
+	for(auto &analysis : analyses) {
+		const auto loudness = analysis.get();
+		REQUIRE(loudness.has_value());
+		CHECK(loudness.value() == Catch::Approx(-23.0).margin(0.1));
+	}
 }

@@ -238,6 +238,7 @@ add_executable(ModPile
 	src/audio/duration_analyzer.cpp
 	src/audio/loudness_analyzer.h
 	src/audio/loudness_analyzer.cpp
+	src/util/thread_safe_queue.h
 	src/db/schema/schema.cpp
 	src/db/schema/schema.h
 	src/db/schema/V001_Initial_schema.cpp
@@ -284,6 +285,7 @@ add_executable(ModPile
 	src/util/xml_util.cpp
 	src/util/toml.h
 	src/util/toml.cpp
+	src/util/thread_safe_queue.h
 
 	src/blocking_queue.h
 	src/config.h
@@ -462,6 +464,7 @@ add_executable(ModPileTest
 	test/test_table_import_export.cpp
 	test/test_table_import_export_performance.cpp
 	test/test_task_util.cpp
+	test/test_thread_safe_queue.cpp
 	test/test_toml.cpp
 	test/test_xml_util.cpp
 )
