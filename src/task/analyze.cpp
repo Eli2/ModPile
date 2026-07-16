@@ -2,8 +2,12 @@
 // SPDX-FileCopyrightText: 2025-2026 Eli2
 #include "analyze.h"
 
+#include <cstdint>
+#include <span>
+
 #include <ebur128.h>
 
+#include "audio/duration_analyzer.h"
 #include "util/defer_util.h"
 #include "util/sqlite_util.h"
 #include "util/xmp_util.h"
@@ -61,12 +65,13 @@ struct FileMeta {
 	double loudness = 0.0;
 };
 
-static void add_result(sqlite3* db, std::string &id, double loudness) {
+static void add_result(sqlite3* db, const std::string &id, double loudness, int64_t audibleDuration) {
 	
 	auto sql = R"(
 		UPDATE meta
 		SET
-			loudness = ?2
+			loudness = ?2,
+			audible_duration = ?3
 		WHERE
 			id = ?1
 		;
@@ -81,6 +86,7 @@ static void add_result(sqlite3* db, std::string &id, double loudness) {
 	
 	sqliteu_bind_string(stmt, 1, id);
 	sqlite3_bind_double(stmt, 2, loudness);
+	sqlite3_bind_int64(stmt, 3, audibleDuration);
 	
 	r = sqlite3_step(stmt);
 	if(r != SQLITE_DONE) {
@@ -137,6 +143,7 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 	const long maxSamples = 10L * 60 * freq;
 	long totalSamples = 0;
 	int lastLoopCount = 0;
+	PcmAudibleDuration audibleDuration(freq, 2);
 
 	while(xmp_play_frame(xmp) == 0) {
 		xmp_frame_info fi;
@@ -160,6 +167,9 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 			break;
 		}
 
+		audibleDuration.add_interleaved(
+			std::span<const int16_t>(src, static_cast<size_t>(frames) * 2));
+
 		r = ebur128_add_frames_short(ebur, src, frames);
 		if(r != EBUR128_SUCCESS) {
 			log_error("Ebur error {}", ebur_err_str(r));
@@ -173,8 +183,8 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 		return;
 	}
 	
-	log_debug("Loudness: {}, ", loudness);
-	add_result(db, id, loudness);
+	log_debug("Loudness: {}, audible duration: {} ms", loudness, audibleDuration.milliseconds());
+	add_result(db, id, loudness, audibleDuration.milliseconds());
 }
 
 void analyze_run(TaskControl &tc, sqlite3 *db) {
@@ -187,7 +197,7 @@ void analyze_run(TaskControl &tc, sqlite3 *db) {
 				meta.id
 			FROM meta
 			WHERE
-				(meta.loudness IS NULL)
+				((meta.loudness IS NULL) OR (meta.audible_duration IS NULL))
 				AND (meta.todo != -1)
 			;
 		)";

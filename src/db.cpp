@@ -404,3 +404,27 @@ std::optional<double> db_get_loudness(sqlite3* db, const std::string id) {
 
 	return sqlite_util_column_double(stmt, 0);
 }
+
+std::optional<int64_t> db_get_audible_duration(sqlite3* db, const std::string id) {
+	auto sql = R"(
+		SELECT audible_duration
+		FROM meta
+		WHERE id == ?1
+		LIMIT 1;
+	)";
+
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
+	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		log_error("prepare failed: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+
+	sqlite3_bind_text(stmt, 1, id.data(), id.length(), SQLITE_STATIC);
+	const auto step = sqlite3_step(stmt);
+	if(step == SQLITE_DONE) return std::nullopt;
+	if(step != SQLITE_ROW) {
+		log_error("step failed: {}", sqlite3_errmsg(db));
+		return std::nullopt;
+	}
+	return sqlite_util_column_int64(stmt, 0);
+}

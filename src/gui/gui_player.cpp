@@ -92,6 +92,13 @@ void gui_player(AppState &app) {
 	}
 
 	{
+		bool skip = app.player.state.skip_trailing_silence.load();
+		if(ImGui::Checkbox("Skip trailing silence", &skip)) {
+			app.player.state.skip_trailing_silence.store(skip);
+		}
+	}
+
+	{
 		using C = AppState::Charts::Criterion;
 		int64_t trackId = app.player.state.current_playlist_track_id.load();
 		bool inCharts   = app.player.state.in_charts_mode.load();

@@ -115,6 +115,7 @@ struct AppState {
 			std::atomic<float>   eq_mid2 = 1.0f;
 			std::atomic<float>   eq_high = 1.0f;
 			std::atomic<bool>    eq_enabled = true;
+			std::atomic<bool>    skip_trailing_silence = true;
 			std::atomic<bool>    in_charts_mode = false;
 		} state;
 		struct Track {

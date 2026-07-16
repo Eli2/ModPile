@@ -60,6 +60,7 @@ void config_load(AppState &app) {
 	if(auto v = r.get_float("player", "gain"))             app.player.state.gain.store(static_cast<float>(*v));
 	if(auto v = r.get_float("player", "stereo_width"))    app.player.state.stereo_width.store(static_cast<float>(*v));
 	if(auto v = r.get_float("player", "target_loudness")) app.config.player.target_loudness = *v;
+	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.player.state.skip_trailing_silence = *v;
 
 	if(auto v = r.get_float("eq", "low"))     app.player.state.eq_low.store(static_cast<float>(*v));
 	if(auto v = r.get_float("eq", "mid1"))    app.player.state.eq_mid1.store(static_cast<float>(*v));
@@ -97,6 +98,7 @@ void config_save(AppState &app) {
 	w.write("gain",             static_cast<double>(app.player.state.gain.load()));
 	w.write("stereo_width",     static_cast<double>(app.player.state.stereo_width.load()));
 	w.write("target_loudness",  app.config.player.target_loudness);
+	w.write("skip_trailing_silence", app.player.state.skip_trailing_silence.load());
 
 	w.section("eq");
 	w.write("enabled", app.player.state.eq_enabled.load());

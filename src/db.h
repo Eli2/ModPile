@@ -27,6 +27,7 @@ std::optional<std::string> db_get_random(sqlite3 *db);
 
 std::optional<double> db_get_rating(sqlite3* db, const std::string id);
 std::optional<double> db_get_loudness(sqlite3* db, const std::string id);
+std::optional<int64_t> db_get_audible_duration(sqlite3* db, const std::string id);
 
 struct PlaylistTrackRef {
 	int64_t playlist_track_id = 0;

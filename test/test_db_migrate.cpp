@@ -64,7 +64,7 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 	REQUIRE(db_migrate(db) == true);
 
 	SECTION("tracking table records migrations as successful") {
-		REQUIRE(migration_count(db) == 2);
+		REQUIRE(migration_count(db) == 3);
 
 		sqlite3_stmt *stmt = nullptr;
 		sqlite3_prepare_v2(db,
@@ -75,6 +75,9 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 		CHECK(sqlite3_column_int(stmt, 1) == 1);
 		REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
 		CHECK(sqlite3_column_int(stmt, 0) == 2);
+		CHECK(sqlite3_column_int(stmt, 1) == 1);
+		REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+		CHECK(sqlite3_column_int(stmt, 0) == 3);
 		CHECK(sqlite3_column_int(stmt, 1) == 1);
 		sqlite3_finalize(stmt);
 	}
@@ -98,6 +101,7 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 			{ "bpm",       "INTEGER" },
 			{ "duration",  "INTEGER" },
 			{ "loudness",  "REAL"    },
+			{ "audible_duration", "INTEGER" },
 		});
 
 		check_columns(db, "modland", {
@@ -152,7 +156,7 @@ TEST_CASE("db_migrate succeeds on fresh in-memory database", "[db][migration]") 
 
 	SECTION("running db_migrate again is idempotent") {
 		REQUIRE(db_migrate(db) == true);
-		CHECK(migration_count(db) == 2);
+		CHECK(migration_count(db) == 3);
 	}
 
 	sqlite3_close(db);
@@ -164,11 +168,13 @@ TEST_CASE("db_migrate fixes integer division in existing V1 play table", "[db][m
 	REQUIRE(sqlite3_exec(db, V001_sql, nullptr, nullptr, nullptr) == SQLITE_OK);
 	REQUIRE(sqlite3_exec(db, R"(
 		INSERT INTO play(id, rating_total, rating_count, trash, played, skipped, duration)
-		VALUES('track-id', 15, 2, 0, 0, 0, 0)
+		VALUES('track-id', 15, 2, 0, 0, 0, 0);
+		INSERT INTO meta(id, md5, todo, file_name, file_size, name, type, bpm, duration, loudness)
+		VALUES('track-id', 'md5', 0, 'track.s3m', 123, 'Track', 'S3M', 125, 1000, -14.0)
 	)", nullptr, nullptr, nullptr) == SQLITE_OK);
 
 	REQUIRE(db_migrate(db) == true);
-	CHECK(migration_count(db) == 2);
+	CHECK(migration_count(db) == 3);
 
 	sqlite3_stmt *stmt = nullptr;
 	sqlite3_prepare_v2(db,
@@ -178,6 +184,15 @@ TEST_CASE("db_migrate fixes integer division in existing V1 play table", "[db][m
 	CHECK(sqlite3_column_int64(stmt, 0) == 15);
 	CHECK(sqlite3_column_int64(stmt, 1) == 2);
 	CHECK(sqlite3_column_double(stmt, 2) == 7.5);
+	sqlite3_finalize(stmt);
+
+	sqlite3_prepare_v2(db,
+		"SELECT duration, loudness, audible_duration FROM meta WHERE id = 'track-id'",
+		-1, &stmt, nullptr);
+	REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+	CHECK(sqlite3_column_int64(stmt, 0) == 1000);
+	CHECK(sqlite3_column_double(stmt, 1) == -14.0);
+	CHECK(sqlite3_column_type(stmt, 2) == SQLITE_NULL);
 	sqlite3_finalize(stmt);
 
 	sqlite3_close(db);

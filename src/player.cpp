@@ -3,9 +3,11 @@
 #include <format>
 #include "player.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <atomic>
+#include <optional>
 #include <random>
 #include <thread>
 #include <sqlite3.h>
@@ -286,6 +288,7 @@ bool player_init(AppState &app) {
 		bool prebuffering = true;
 		size_t prebufferCount = 0;
 		int lastLoopCount = 0;
+		std::optional<int64_t> audibleDuration;
 		
 		auto playStart = [&]()->auto{
 			seekWasRequested = false;
@@ -304,6 +307,7 @@ bool player_init(AppState &app) {
 			prebuffering = true;
 			prebufferCount = 0;
 			lastLoopCount = 0;
+			audibleDuration.reset();
 			
 			
 			app.player.request.rating = -1;
@@ -445,6 +449,7 @@ bool player_init(AppState &app) {
 			}
 			
 			auto loudness = db_get_loudness(db, file.id);
+			audibleDuration = db_get_audible_duration(db, file.id);
 			auto rating = db_get_rating(db, file.id);
 			
 			pd.id = file.id;
@@ -573,6 +578,16 @@ bool player_init(AppState &app) {
 			
 			xmp_frame_info fi;
 			xmp_get_frame_info(ctx, &fi);
+
+			const bool skipTrailingSilence =
+				app.player.state.skip_trailing_silence.load() && audibleDuration.has_value();
+			if(skipTrailingSilence && fi.time >= audibleDuration.value()) {
+				// This is a natural completion, not a user-requested skip. Leave
+				// nextWasRequested clear so play/skip accounting remains correct.
+				pd.duration = audibleDuration.value();
+				app.player.track.elapsed = static_cast<int>(audibleDuration.value());
+				return State::PlayEnd;
+			}
 			
 			if (fi.loop_count > 0) {
 				log_debug("Non zero loopcount: {}", fi.loop_count);
@@ -587,7 +602,9 @@ bool player_init(AppState &app) {
 			// 	break;
 			// }
 			
-			app.player.track.length = fi.total_time;
+			app.player.track.length = static_cast<int>(skipTrailingSilence
+				? std::min<int64_t>(fi.total_time, audibleDuration.value())
+				: fi.total_time);
 			app.player.track.elapsed = fi.time;
 			
 			if(seekWasRequested) {
