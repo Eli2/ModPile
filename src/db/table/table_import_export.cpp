@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <format>
 #include <istream>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -31,7 +32,7 @@ static bool insert_row(
 	sqlite3 *db,
 	const std::string &table,
 	const std::vector<std::string> &header,
-	const std::vector<std::string> &row
+	const std::vector<std::optional<std::string>> &row
 ) {
 	auto fields = str_join(header, ", ", quote_identifier);
 
@@ -59,7 +60,7 @@ static bool insert_row(
 	}
 
 	for(size_t i = 0; i < row.size(); i++) {
-		int r = sqliteu_bind_string(stmt, i + 1, row[i]);
+		int r = sqliteu_bind_optional_string(stmt, i + 1, row[i]);
 		if(r != SQLITE_OK) {
 			log_error("bind failed: {}", sqlite3_errmsg(db));
 			return false;
@@ -80,9 +81,13 @@ static std::string escape_field(std::string_view field) {
 	for(char c : field) {
 		switch(c) {
 		case '\\': escaped += "\\\\"; break;
+		case '\0': escaped += "\\0";  break;
+		case '\b': escaped += "\\b";  break;
+		case '\f': escaped += "\\f";  break;
 		case '\r': escaped += "\\r";  break;
 		case '\n': escaped += "\\n";  break;
 		case '\t': escaped += "\\t";  break;
+		case '\v': escaped += "\\v";  break;
 		default:
 			escaped += c;
 			break;
@@ -103,9 +108,13 @@ static std::string unescape_field(std::string_view field) {
 		i++;
 		switch(field[i]) {
 		case '\\': unescaped += '\\'; break;
+		case '0':  unescaped += '\0'; break;
+		case 'b':  unescaped += '\b'; break;
+		case 'f':  unescaped += '\f'; break;
 		case 'r':  unescaped += '\r'; break;
 		case 'n':  unescaped += '\n'; break;
 		case 't':  unescaped += '\t'; break;
+		case 'v':  unescaped += '\v'; break;
 		default:
 			unescaped += '\\';
 			unescaped += field[i];
@@ -130,10 +139,20 @@ static std::vector<std::string> split_fields(std::string_view line) {
 	return fields;
 }
 
-static void unescape_fields(std::vector<std::string> &row) {
-	for(auto &field : row) {
-		field = unescape_field(field);
+static std::vector<std::optional<std::string>> decode_fields(const std::vector<std::string> &row) {
+	std::vector<std::optional<std::string>> decoded;
+	decoded.reserve(row.size());
+	for(const auto &field : row) {
+		// PostgreSQL COPY text convention: \N represents SQL NULL. It is
+		// recognized before unescaping, so a literal "\N" (exported as "\\N")
+		// remains distinct from the sentinel.
+		if(field == "\\N") {
+			decoded.emplace_back(std::nullopt);
+		} else {
+			decoded.emplace_back(unescape_field(field));
+		}
 	}
+	return decoded;
 }
 
 static std::vector<std::string> insertable_columns(sqlite3 *db, const std::string &table) {
@@ -205,6 +224,10 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 	while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		for(int i = 0; i < ncols; i++) {
 			if(i > 0) out << '\t';
+			if(sqlite3_column_type(stmt, i) == SQLITE_NULL) {
+				out << "\\N";
+				continue;
+			}
 			const auto *val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
 			if(val) {
 				const auto nbytes = static_cast<size_t>(sqlite3_column_bytes(stmt, i));
@@ -252,13 +275,12 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 
 		auto rowVec = split_fields(line);
 		remove_columns(rowVec, ignoredColumns);
-		unescape_fields(rowVec);
 		if(header.size() != rowVec.size()) {
 			log_debug("Column count mismatch in file");
 			continue;
 		}
 
-		if(!insert_row(db, table, header, rowVec)) {
+		if(!insert_row(db, table, header, decode_fields(rowVec))) {
 			log_error("Failed to import row {}", lineIdx + 1);
 			return false;
 		}
