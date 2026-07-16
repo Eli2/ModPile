@@ -10,6 +10,7 @@
 #include "log.h"
 
 void export_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path) {
+	auto task_status = tc.scope(std::format("Exporting play statistics to {}", path.string()));
 	log_debug("Exporting playstats: {}", path.string());
 
 	std::ofstream out(path, std::ios::binary);
@@ -22,6 +23,7 @@ void export_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path 
 }
 
 void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path) {
+	auto task_status = tc.scope(std::format("Importing play statistics from {}", path.string()));
 	log_debug("Importing playstats: {}", path.string());
 
 	std::ifstream in(path, std::ios_base::binary);

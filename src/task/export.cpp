@@ -81,7 +81,7 @@ void export_playlist_run(
 	const std::string &playlist_name,
 	const std::vector<ExportTrack> &tracks)
 {
-	tc.statusline.set(std::format("Exporting playlist \"{}\"", playlist_name));
+	auto task_status = tc.scope(std::format("Exporting playlist \"{}\"", playlist_name));
 
 	std::set<std::string> used_names;
 	// Mapping from track index to the filename written on disk
@@ -91,7 +91,8 @@ void export_playlist_run(
 		if(tc.abort) break;
 
 		const auto &t = tracks[i];
-		tc.statusline.set(std::format("Exporting {}/{}: {}", i + 1, tracks.size(), t.file_name));
+		task_status.progress(i + 1, tracks.size(), "tracks");
+		auto track_status = tc.scope(t.file_name);
 
 		FileRow file;
 		if(!db_get_file(db, t.id, file)) {
@@ -118,7 +119,8 @@ void export_playlist_run(
 	if(tc.abort) return;
 
 	// Write XSPF
-	tc.statusline.set("Writing XSPF...");
+	task_status.clear_progress();
+	auto xspf_status = tc.scope("Writing XSPF");
 	std::ostringstream xspf;
 	xspf << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 	xspf << "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n";

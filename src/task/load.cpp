@@ -21,7 +21,7 @@
 namespace fs = std::filesystem;
 
 static bool parseModFoo(TaskControl &tc, sqlite3* ctx, const std::string fileName, const std::span<std::byte> data) {
-	tc.statusline2.set(fileName);
+	auto file_status = tc.scope(fileName);
 	return parseMod(ctx, fileName, data);
 }
 
@@ -134,6 +134,6 @@ static void recurseFilesystem(TaskControl &tc, sqlite3* db, const int depth, con
 }
 
 void load_run(TaskControl &tc, sqlite3 *db, std::filesystem::path &path) {
-	tc.statusline.set(std::format("Loading: {}", path.string()));
+	auto task_status = tc.scope(std::format("Loading {}", path.string()));
 	recurseFilesystem(tc, db, 0, path);
 }

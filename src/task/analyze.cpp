@@ -178,6 +178,7 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 }
 
 void analyze_run(TaskControl &tc, sqlite3 *db) {
+	auto task_status = tc.scope("Analyzing tracks");
 	
 	std::vector<std::string> rows;
 	{
@@ -215,6 +216,7 @@ void analyze_run(TaskControl &tc, sqlite3 *db) {
 	
 	for(int i = 0; auto & id: rows) {
 		i++;
+		task_status.progress(i, rows.size(), "tracks");
 		if(tc.abort) {
 			break;
 		}
@@ -227,9 +229,7 @@ void analyze_run(TaskControl &tc, sqlite3 *db) {
 		}
 
 		log_debug("Analyzing: {}", file.name);
-		tc.statusline.set(std::format("{}/{}", i, rows.size()));
-		tc.statusline2.set(std::format("Analyzing: {}", file.name));
-		
+		auto file_status = tc.scope(file.name);
 		analyze(tc, db, file.id, file.rawData);
 	}
 }

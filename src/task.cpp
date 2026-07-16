@@ -37,7 +37,8 @@ static bool exec(sqlite3* db, const char* sql) {
 
 struct UpdateFulltextSearchIndex {
 	
-	void run(sqlite3* db) {
+	void run(TaskControl &tc, sqlite3* db) {
+		auto status = tc.scope("Rebuilding full-text search index");
 		log_debug("Updating fulltext index ...");
 		Timer timer;
 		
@@ -79,7 +80,8 @@ struct UpdateFulltextSearchIndex {
 
 struct MarkTracksForAnalysis {
 	
-	void run(sqlite3* db) {
+	void run(TaskControl &tc, sqlite3* db) {
+		auto status = tc.scope("Marking tracks with missing metadata");
 		auto sql = R"(
 			UPDATE meta
 			SET todo=1
@@ -222,8 +224,7 @@ void task_init(AppState &app) {
 			auto q = g_taskQueue.pop();
 
 			g_taskControl.abort = false;
-			g_taskControl.statusline.set("");
-			g_taskControl.statusline2.set("");
+			g_taskControl.reset();
 			g_currentTaskName.set(task_name(q));
 			
 			bool exit = false;
@@ -241,10 +242,10 @@ void task_init(AppState &app) {
 					analyze_run(g_taskControl, db);
 				},
 				[&](UpdateFulltextSearchIndex &t){
-					t.run(db);
+					t.run(g_taskControl, db);
 				},
 				[&](MarkTracksForAnalysis &h){
-					h.run(db);
+					h.run(g_taskControl, db);
 				},
 				[&](ModlandPullFilenames &h){
 					modland_update_index(g_taskControl, db);
@@ -271,17 +272,18 @@ void task_init(AppState &app) {
 			} catch(const std::exception &e) {
 				failed = true;
 				log_error("Task failed with exception: {}", e.what());
-				g_taskControl.statusline2.set(std::format("FAILED: {}", e.what()));
+				g_taskControl.fail(e.what());
 			} catch(...) {
 				failed = true;
 				log_error("Task failed with unknown exception");
-				g_taskControl.statusline2.set("FAILED: unknown exception");
+				g_taskControl.fail("Unknown exception");
 			}
 
 			g_currentTaskName.set("");
-			//g_taskControl.statusline.set("");
-			if(!failed)
-				g_taskControl.statusline2.set("DONE");
+			if(!failed && g_taskControl.snapshot().outcome == TaskStatus::Outcome::Running) {
+				if(g_taskControl.abort) g_taskControl.aborted();
+				else g_taskControl.succeed();
+			}
 
 			if(exit) {
 				break;
@@ -311,11 +313,8 @@ void task_stop_current() {
 	g_taskControl.abort = true;
 }
 
-std::string task_get_statusline() {
-	auto l1 = g_taskControl.statusline.get();
-	auto l2 = g_taskControl.statusline2.get();
-
-	return std::format("{}\n{}", l1, l2);
+TaskStatus task_get_status() {
+	return g_taskControl.snapshot();
 }
 
 TaskQueueInfo task_get_queue_info() {

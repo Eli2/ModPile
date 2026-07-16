@@ -291,6 +291,7 @@ static void readArchive(TaskControl &tc, sqlite3* db, const std::span<std::byte>
 }
 
 void modland_update_index(TaskControl &tc, sqlite3* db) {
+	auto task_status = tc.scope("Updating Modland index");
 
 	CURL *curl = curl_easy_init();
 	SCOPE_EXIT(curl_easy_cleanup(curl););
@@ -320,6 +321,7 @@ void modland_update_index(TaskControl &tc, sqlite3* db) {
 
 
 void modland_probe_formats(TaskControl &tc, sqlite3* db) {
+	auto task_status = tc.scope("Probing Modland formats");
 	// Collect distinct formats not yet probed
 	std::vector<std::string> formats;
 	{
@@ -378,11 +380,11 @@ void modland_probe_formats(TaskControl &tc, sqlite3* db) {
 
 	for(int i = 0; auto &format : formats) {
 		i++;
+		task_status.progress(i, formats.size(), "formats");
 		if(tc.abort)
 			break;
 
-		tc.statusline.set(std::format("{}/{}", i, formats.size()));
-		tc.statusline2.set(std::format("Probing: {}", format));
+		auto format_status = tc.scope(format);
 
 		// Get a sample file for this format
 		sqlite3_reset(sample_stmt);
@@ -532,6 +534,7 @@ struct PathAndMd5 {
 
 
 void modland_download(TaskControl &tc, sqlite3* db) {
+	auto task_status = tc.scope("Downloading missing Modland files");
 	std::vector<PathAndMd5> toDownload;
 	{
 		auto sql = R"(
@@ -579,12 +582,12 @@ void modland_download(TaskControl &tc, sqlite3* db) {
 	
 	for(int i = 0; auto &toDl: toDownload) {
 		i++;
+		task_status.progress(i, toDownload.size(), "files");
 		if(tc.abort) {
 			break;
 		}
 		
-		tc.statusline.set(std::format("{}/{}", i, toDownload.size()));
-		tc.statusline2.set(std::format("Downloading: {}", toDl.path));
+		auto file_status = tc.scope(toDl.path);
 		downloadFile(tc, db, toDl.path, toDl.md5);
 	}
 }

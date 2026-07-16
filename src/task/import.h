@@ -5,6 +5,7 @@
 #include "db_common.h"
 #include "task_util.h"
 
+#include <filesystem>
 #include <iosfwd>
 
 void import_playstats(TaskControl &tc, sqlite3 *db, const std::filesystem::path &path);

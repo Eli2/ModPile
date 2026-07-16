@@ -3,13 +3,14 @@
 #pragma once
 
 #include "global.h"
+#include "task_util.h"
 
 void task_init(AppState &app);
 void task_quit(AppState &app);
 
 void task_stop_current();
 
-std::string task_get_statusline();
+TaskStatus task_get_status();
 
 struct TaskQueueInfo {
 	std::string              current_task;

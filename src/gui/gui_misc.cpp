@@ -26,6 +26,7 @@ void gui_indexer(AppState &app) {
 	ImGui::Begin("Task");
 
 	auto info = task_get_queue_info();
+	auto status = task_get_status();
 
 	if(!info.current_task.empty()) {
 		ImGui::TextUnformatted(info.current_task.c_str());
@@ -33,9 +34,42 @@ void gui_indexer(AppState &app) {
 		if(ImGui::SmallButton("Abort")) {
 			task_stop_current();
 		}
-		ImGui::TextUnformatted(task_get_statusline().c_str());
+		for(size_t depth = 0; depth < status.frames.size(); ++depth) {
+			const auto &frame = status.frames[depth];
+			ImGui::Indent(static_cast<float>(depth) * 12.0f);
+			ImGui::TextUnformatted(frame.label.c_str());
+			if(frame.progress) {
+				const auto &progress = *frame.progress;
+				std::string overlay;
+				if(progress.total) {
+					overlay = std::format("{} / {}", progress.current, *progress.total);
+				} else {
+					overlay = std::to_string(progress.current);
+				}
+				if(!progress.unit.empty()) overlay += std::format(" {}", progress.unit);
+				if(progress.total && *progress.total > 0) {
+					const auto fraction = static_cast<float>(progress.current) /
+						static_cast<float>(*progress.total);
+					ImGui::ProgressBar(std::clamp(fraction, 0.0f, 1.0f), ImVec2(-1, 0), overlay.c_str());
+				} else {
+					ImGui::TextDisabled("%s", overlay.c_str());
+				}
+			}
+			ImGui::Unindent(static_cast<float>(depth) * 12.0f);
+		}
+		if(status.outcome == TaskStatus::Outcome::Failed) {
+			ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "Failed: %s", status.message.c_str());
+		} else if(status.outcome == TaskStatus::Outcome::Aborted) {
+			ImGui::TextDisabled("Aborted%s%s", status.message.empty() ? "" : ": ", status.message.c_str());
+		}
 	} else {
-		ImGui::TextDisabled("Idle");
+		if(status.outcome == TaskStatus::Outcome::Failed) {
+			ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "Failed: %s", status.message.c_str());
+		} else if(status.outcome == TaskStatus::Outcome::Aborted) {
+			ImGui::TextDisabled("Aborted%s%s", status.message.empty() ? "" : ": ", status.message.c_str());
+		} else {
+			ImGui::TextDisabled("Idle");
+		}
 	}
 
 	if(!info.queued.empty()) {

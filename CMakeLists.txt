@@ -419,6 +419,8 @@ add_executable(ModPileTest
 	src/util/xml_util.cpp
 	src/util/toml.h
 	src/util/toml.cpp
+	src/task_util.h
+	src/task_util.cpp
 	src/log.h
 	src/log.cpp
 	src/db/schema/schema.h
@@ -436,6 +438,7 @@ add_executable(ModPileTest
 	test/test_db_migrate.cpp
 	test/test_playstats_import_export.cpp
 	test/test_table_import_export.cpp
+	test/test_task_util.cpp
 	test/test_toml.cpp
 	test/test_xml_util.cpp
 )
