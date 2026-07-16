@@ -236,6 +236,8 @@ set(hash_util_srcs
 add_executable(ModPile
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
+	src/audio/loudness_analyzer.h
+	src/audio/loudness_analyzer.cpp
 	src/db/schema/schema.cpp
 	src/db/schema/schema.h
 	src/db/schema/V001_Initial_schema.cpp
@@ -418,6 +420,8 @@ add_executable(ModPileTest
 	${hash_util_srcs}
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
+	src/audio/loudness_analyzer.h
+	src/audio/loudness_analyzer.cpp
 	src/util/coder/base64.h
 	src/util/coder/base64.cpp
 	src/util/str_util.h
@@ -448,6 +452,7 @@ add_executable(ModPileTest
 
 	test/test_hash_util.cpp
 	test/test_audio_silence.cpp
+	test/test_loudness_analyzer.cpp
 	test/test_base64.cpp
 	test/test_blocking_queue.cpp
 	test/test_str_util.cpp
@@ -469,6 +474,7 @@ target_include_directories(ModPileTest PRIVATE
 target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
 	SQLite::SQLite3
+	ebur128
 )
 if(MODPILE_USE_SYSTEM_ZSTD)
 	target_link_libraries(ModPileTest PRIVATE zstd::libzstd_shared)

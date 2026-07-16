@@ -5,30 +5,12 @@
 #include <cstdint>
 #include <span>
 
-#include <ebur128.h>
-
 #include "audio/duration_analyzer.h"
+#include "audio/loudness_analyzer.h"
 #include "util/defer_util.h"
 #include "util/sqlite_util.h"
 #include "util/xmp_util.h"
 #include "log.h"
-
-static const char* ebur_err_str(int e) {
-	switch(e) {
-	case EBUR128_SUCCESS:
-		return "EBUR128_SUCCESS";
-	case EBUR128_ERROR_NOMEM:
-		return "EBUR128_ERROR_NOMEM";
-	case EBUR128_ERROR_INVALID_MODE:
-		return "EBUR128_ERROR_INVALID_MODE";
-	case EBUR128_ERROR_INVALID_CHANNEL_INDEX:
-		return "EBUR128_ERROR_INVALID_CHANNEL_INDEX";
-	case EBUR128_ERROR_NO_CHANGE:
-		return "EBUR128_ERROR_NO_CHANGE";
-	default:
-		return "UNKNOWN";
-	}
-}
 
 static void set_todo(sqlite3* db, const std::string &id, const int todo) {
 	auto sql = R"(
@@ -111,12 +93,11 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 	
 	int freq = 48000;
 	
-	auto ebur = ebur128_init(2, freq, EBUR128_MODE_I);
-	if(!ebur) {
-		log_error("Could not create ebur128_state!");
+	LoudnessAnalyzer loudnessAnalyzer(freq, 2);
+	if(!loudnessAnalyzer.valid()) {
+		log_error("Could not initialize loudness analyzer: {}", loudnessAnalyzer.error());
 		return;
 	}
-	SCOPE_EXIT(ebur128_destroy(&ebur););
 	
 	
 	if(xmp_start_player(xmp, freq, 0) < 0) {
@@ -167,24 +148,21 @@ static void analyze(TaskControl &tc, sqlite3* db, std::string &id, std::vector<s
 			break;
 		}
 
-		audibleDuration.add_interleaved(
-			std::span<const int16_t>(src, static_cast<size_t>(frames) * 2));
-
-		r = ebur128_add_frames_short(ebur, src, frames);
-		if(r != EBUR128_SUCCESS) {
-			log_error("Ebur error {}", ebur_err_str(r));
+		const auto pcm = std::span<const int16_t>(src, static_cast<size_t>(frames) * 2);
+		audibleDuration.add_interleaved(pcm);
+		if(!loudnessAnalyzer.add_interleaved(pcm)) {
+			log_error("Loudness analysis error: {}", loudnessAnalyzer.error());
 		}
 	}
 	
-	double loudness;
-	r = ebur128_loudness_global(ebur, &loudness);
-	if(r != EBUR128_SUCCESS) {
-		log_error("Ebur error {}", ebur_err_str(r));
+	const auto loudness = loudnessAnalyzer.integrated_loudness();
+	if(!loudness.has_value()) {
+		log_error("Loudness analysis error: {}", loudnessAnalyzer.error());
 		return;
 	}
 	
-	log_debug("Loudness: {}, audible duration: {} ms", loudness, audibleDuration.milliseconds());
-	add_result(db, id, loudness, audibleDuration.milliseconds());
+	log_debug("Loudness: {}, audible duration: {} ms", loudness.value(), audibleDuration.milliseconds());
+	add_result(db, id, loudness.value(), audibleDuration.milliseconds());
 }
 
 void analyze_run(TaskControl &tc, sqlite3 *db) {
