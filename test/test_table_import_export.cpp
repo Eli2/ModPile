@@ -242,3 +242,30 @@ TEST_CASE("table import rejects ANY columns because storage class is not encoded
 		}
 	}
 }
+
+TEST_CASE("table import export escapes column names", "[db][table]") {
+	sqlite3 *db = open_memory_db();
+	const std::string column = "tab\tline\ncarriage\rslash\\name";
+	const auto create = "CREATE TABLE sample (id TEXT PRIMARY KEY, \"" + column + "\" TEXT) STRICT";
+	REQUIRE(sqlite3_exec(db, create.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	const auto insert = "INSERT INTO sample(id, \"" + column + "\") VALUES('row', 'value')";
+	REQUIRE(sqlite3_exec(db, insert.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::ostringstream out;
+	REQUIRE(db_export_table(db, "sample", out));
+	CHECK(out.str() == "id\ttab\\tline\\ncarriage\\rslash\\\\name\nrow\tvalue\n");
+
+	REQUIRE(sqlite3_exec(db, "DELETE FROM sample", nullptr, nullptr, nullptr) == SQLITE_OK);
+	std::istringstream in(out.str());
+	REQUIRE(db_import_table(db, "sample", in));
+
+	const auto select_sql = "SELECT \"" + column + "\" FROM sample WHERE id = 'row'";
+	sqlite3_stmt *select = nullptr;
+	REQUIRE(sqlite3_prepare_v2(db, select_sql.c_str(), -1, &select, nullptr) == SQLITE_OK);
+	REQUIRE(sqlite3_step(select) == SQLITE_ROW);
+	CHECK(std::string(reinterpret_cast<const char*>(sqlite3_column_text(select, 0))) == "value");
+	sqlite3_finalize(select);
+
+	sqlite3_close(db);
+}

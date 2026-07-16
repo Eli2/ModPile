@@ -293,7 +293,7 @@ bool db_export_table(sqlite3 *db, const std::string &table, std::ostream &out) {
 
 	for(int i = 0; i < ncols; i++) {
 		if(i > 0) out << '\t';
-		out << sqlite3_column_name(stmt, i);
+		out << escape_field(sqlite3_column_name(stmt, i));
 	}
 	out << '\n';
 
@@ -372,6 +372,9 @@ bool db_import_table(sqlite3 *db, const std::string &table, std::istream &in) {
 		lineIdx++;
 		if(lineIdx == 0) {
 			header = split_fields(line);
+			for(auto &column : header) {
+				column = unescape_field(column);
+			}
 			ignoredColumns = remove_non_insertable_columns(header, insertableColumns);
 			continue;
 		}
