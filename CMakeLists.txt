@@ -448,6 +448,7 @@ add_executable(ModPileTest
 	test/test_db_common.cpp
 	test/test_playstats_import_export.cpp
 	test/test_table_import_export.cpp
+	test/test_table_import_export_performance.cpp
 	test/test_task_util.cpp
 	test/test_toml.cpp
 	test/test_xml_util.cpp
