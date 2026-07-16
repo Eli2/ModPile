@@ -106,7 +106,7 @@ bool db_init(AppState &app) {
 
 	// Verify (or stamp) the application_id so we don't accidentally pollute a foreign database.
 	{
-		sqlite3_stmt* stmt = nullptr;
+		SQLITE_FINALIZE sqlite3_stmt* stmt = nullptr;
 		int32_t app_id = 0;
 		if(sqlite3_prepare_v2(db, "PRAGMA application_id", -1, &stmt, nullptr) != SQLITE_OK) {
 			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
@@ -117,11 +117,9 @@ bool db_init(AppState &app) {
 			app_id = sqlite3_column_int(stmt, 0);
 		} else {
 			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
-			sqlite3_finalize(stmt);
 			app.setup.error_message = "Could not inspect the selected database file.";
 			return false;
 		}
-		sqlite3_finalize(stmt);
 
 		if(app_id == 0) {
 			auto empty = db_is_empty(db);

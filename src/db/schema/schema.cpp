@@ -58,7 +58,7 @@ static int64_t now_ms() {
 
 static std::optional<int> current_version(sqlite3 *db) {
 	const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migration WHERE success = 1";
-	sqlite3_stmt *stmt = nullptr;
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		log_error("schema_migration version prepare failed: {}", sqlite3_errmsg(db));
 		return std::nullopt;
@@ -70,10 +70,8 @@ static std::optional<int> current_version(sqlite3 *db) {
 		v = sqlite3_column_int(stmt, 0);
 	} else if(step != SQLITE_DONE) {
 		log_error("schema_migration version step failed: {}", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
 		return std::nullopt;
 	}
-	sqlite3_finalize(stmt);
 	return v;
 }
 
@@ -82,7 +80,7 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms) {
 		INSERT INTO schema_migration(version, description, installed_on, execution_ms, success)
 		VALUES(?1, ?2, ?3, ?4, ?5)
 	)";
-	sqlite3_stmt *stmt = nullptr;
+	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		log_error("schema_migration record prepare failed: {}", sqlite3_errmsg(db));
 		return false;
@@ -96,7 +94,6 @@ static bool record_migration(sqlite3 *db, const Migration &m, int64_t exec_ms) {
 	if(!ok) {
 		log_error("schema_migration record step failed: {}", sqlite3_errmsg(db));
 	}
-	sqlite3_finalize(stmt);
 	return ok;
 }
 
