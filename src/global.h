@@ -276,3 +276,8 @@ struct AppState {
 		SPSCRingBuffer<float, 65536> sample_queue;
 	} visualizer;
 };
+
+// Reinitialize transient application state while retaining the window, graphics
+// context, and user configuration. Call only after subsystem threads and
+// connections have been stopped.
+void reset_transient_app_state(AppState &app);

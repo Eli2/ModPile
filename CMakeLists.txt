@@ -463,6 +463,8 @@ add_executable(ModPileTest
 	src/util/xmp_util.cpp
 	src/task_util.h
 	src/task_util.cpp
+	src/global.h
+	src/global.cpp
 	src/log.h
 	src/log.cpp
 	src/db/schema/schema.h
@@ -496,6 +498,7 @@ add_executable(ModPileTest
 	test/test_table_import_export_performance.cpp
 	test/test_task_util.cpp
 	test/test_thread_safe_queue.cpp
+	test/test_global.cpp
 	test/test_toml.cpp
 	test/test_xml_util.cpp
 )

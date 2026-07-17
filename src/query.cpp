@@ -226,6 +226,12 @@ void db_query_quit() {
 	if(g_queryThread.joinable())
 		g_queryThread.join();
 	g_queryThreadQuit = false;
+	{
+		std::lock_guard lock(g_queryMutex);
+		g_queryRequest.reset();
+		g_queryResponse.reset();
+	}
+	g_queryCancel = false;
 	sqlite3_close(g_queryConnection);
 	g_queryConnection = nullptr;
 }

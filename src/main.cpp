@@ -51,6 +51,7 @@ static void app_full_quit(AppState &app) {
 	charts_quit();
 	playlist_quit();
 	player_quit();
+	reset_transient_app_state(app);
 }
 
 // Initialize all subsystems that require a configured database path.
