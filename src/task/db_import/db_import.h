@@ -25,8 +25,8 @@ struct DatabaseImportInspection {
 // Opens the source read-only and validates stamp, migration, epoch, then schema.
 DatabaseImportInspection inspect_database_import(const std::filesystem::path &path);
 
-// Atomically adds the selected source data to db. Existing destination data is
-// never deleted or replaced.
+// Add the selected source data without deleting or replacing destination data.
+// Large categories commit in batches, so completed batches survive an abort.
 bool import_database(
 	TaskControl &tc,
 	sqlite3 *db,

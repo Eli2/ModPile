@@ -132,21 +132,11 @@ bool import_database(TaskControl &tc, sqlite3 *db, const std::filesystem::path &
 		return false;
 	}
 
-	SqliteTransaction transaction(db);
-	if(!transaction.active()) {
-		tc.fail("Could not start the database import transaction.");
-		return false;
-	}
 	const bool ok = dispatch_import(tc, source, inspection.epoch, db,
 		MODPILE_DATABASE_EPOCH, options);
 	if(!ok) {
-		transaction.rollback();
-		if(tc.abort) tc.aborted("Database import aborted; no changes were saved.");
-		else tc.fail("Database import failed; no changes were saved.");
-		return false;
-	}
-	if(!transaction.commit()) {
-		tc.fail("Could not commit the database import; no changes were saved.");
+		if(tc.abort) tc.aborted("Database import aborted; completed batches were kept.");
+		else tc.fail("Database import failed; completed batches were kept.");
 		return false;
 	}
 	tc.succeed("Database import completed.");

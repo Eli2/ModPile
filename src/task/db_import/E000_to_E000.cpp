@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -17,6 +18,8 @@
 #include "../../util/sqlite_util.h"
 
 namespace {
+
+constexpr uint64_t IMPORT_BATCH_SIZE = 10'000;
 
 struct Epoch000File {
 	std::string id;
@@ -284,11 +287,25 @@ bool import_files(TaskControl &tc, sqlite3 *source, sqlite3 *destination) {
 	}
 
 	uint64_t count = 0;
+	uint64_t files_in_batch = 0;
+	std::unique_ptr<SqliteTransaction> transaction;
 	while(true) {
 		if(tc.abort) return false;
 
 		const int result = sqlite3_step(rows);
-		if(result == SQLITE_DONE) return true;
+		if(result == SQLITE_DONE) {
+			if(transaction) {
+				status.label("Committing final file batch");
+				sqlite3_reset(insert_file);
+				sqlite3_reset(insert_meta);
+				if(!transaction->commit()) {
+					log_error("Committing the final file-import batch failed: {}",
+						sqlite3_errmsg(destination));
+					return false;
+				}
+			}
+			return true;
+		}
 		if(result != SQLITE_ROW) {
 			log_error("Reading an epoch 0 file failed: {}", sqlite3_errmsg(source));
 			return false;
@@ -301,9 +318,30 @@ bool import_files(TaskControl &tc, sqlite3 *source, sqlite3 *destination) {
 		const auto decode_result = decode_file(file, raw, metadata);
 		if(decode_result == DecodeFileResult::invalid) return false;
 		if(decode_result == DecodeFileResult::success) {
+			if(!transaction) {
+				transaction = std::make_unique<SqliteTransaction>(destination);
+				if(!transaction->active()) {
+					log_error("Starting a file-import batch failed: {}", sqlite3_errmsg(destination));
+					return false;
+				}
+			}
 			if(!write_file(destination, insert_file, insert_meta, file, metadata)) return false;
+			++files_in_batch;
 		}
 		status.progress(++count, total, "files");
+
+		if(files_in_batch == IMPORT_BATCH_SIZE) {
+			status.label("Committing file batch");
+			sqlite3_reset(insert_file);
+			sqlite3_reset(insert_meta);
+			if(!transaction->commit()) {
+				log_error("Committing a file-import batch failed: {}", sqlite3_errmsg(destination));
+				return false;
+			}
+			transaction.reset();
+			files_in_batch = 0;
+			status.label("Validating and importing epoch 0 files");
+		}
 	}
 }
 
@@ -409,12 +447,28 @@ bool import_playstats(TaskControl &tc, sqlite3 *source, sqlite3 *destination) {
 		return false;
 	}
 
+	SqliteTransaction transaction(destination);
+	if(!transaction.active()) {
+		log_error("Starting the play-statistics import transaction failed: {}",
+			sqlite3_errmsg(destination));
+		return false;
+	}
+
 	uint64_t count = 0;
 	while(true) {
 		if(tc.abort) return false;
 
 		const int result = sqlite3_step(rows);
-		if(result == SQLITE_DONE) return true;
+		if(result == SQLITE_DONE) {
+			status.label("Committing imported play statistics");
+			sqlite3_reset(insert);
+			if(!transaction.commit()) {
+				log_error("Committing imported play statistics failed: {}",
+					sqlite3_errmsg(destination));
+				return false;
+			}
+			return true;
+		}
 		if(result != SQLITE_ROW) {
 			log_error("Reading epoch 0 play statistics failed: {}", sqlite3_errmsg(source));
 			return false;
@@ -625,7 +679,20 @@ bool import_playlists(TaskControl &tc, sqlite3 *source, sqlite3 *destination) {
 	auto status = tc.scope("Importing epoch 0 playlists");
 	std::vector<Epoch000Playlist> playlists;
 	if(!read_playlists(tc, source, playlists)) return false;
-	return write_playlists(tc, destination, playlists, status);
+
+	SqliteTransaction transaction(destination);
+	if(!transaction.active()) {
+		log_error("Starting the playlist-import transaction failed: {}",
+			sqlite3_errmsg(destination));
+		return false;
+	}
+	if(!write_playlists(tc, destination, playlists, status)) return false;
+	status.label("Committing imported playlists");
+	if(!transaction.commit()) {
+		log_error("Committing imported playlists failed: {}", sqlite3_errmsg(destination));
+		return false;
+	}
+	return true;
 }
 
 } // namespace
