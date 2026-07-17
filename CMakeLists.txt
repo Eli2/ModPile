@@ -476,6 +476,8 @@ add_executable(ModPileTest
 	src/db/table/table_import_export.cpp
 	src/task/import.h
 	src/task/import.cpp
+	src/task/export.h
+	src/task/export.cpp
 	src/task/db_import/db_import.h
 	src/task/db_import/db_import.cpp
 	src/task/db_import/db_import_internal.h
@@ -493,6 +495,7 @@ add_executable(ModPileTest
 	test/test_database_epoch.cpp
 	test/test_db_common.cpp
 	test/test_playstats_import_export.cpp
+	test/test_playlist_export.cpp
 	test/test_database_import.cpp
 	test/test_table_import_export.cpp
 	test/test_table_import_export_performance.cpp

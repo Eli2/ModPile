@@ -11,7 +11,7 @@
 #include "../task.h"
 #include "../task_util.h"
 
-void export_playlist_run(
+bool export_playlist_run(
 	TaskControl &tc,
 	sqlite3 *db,
 	const std::filesystem::path &directory,

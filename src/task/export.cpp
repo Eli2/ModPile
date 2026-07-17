@@ -74,7 +74,7 @@ static std::string unique_filename(
 
 } // namespace
 
-void export_playlist_run(
+bool export_playlist_run(
 	TaskControl &tc,
 	sqlite3 *db,
 	const std::filesystem::path &directory,
@@ -88,7 +88,7 @@ void export_playlist_run(
 	std::vector<std::string> written_names(tracks.size());
 
 	for(size_t i = 0; i < tracks.size(); ++i) {
-		if(tc.abort) break;
+		if(tc.abort) return false;
 
 		const auto &t = tracks[i];
 		task_status.progress(i + 1, tracks.size(), "tracks");
@@ -96,8 +96,10 @@ void export_playlist_run(
 
 		FileRow file;
 		if(!db_get_file(db, t.id, file)) {
-			log_error("export: failed to get file {}", t.id);
-			continue;
+			const auto message = std::format("Failed to read track {} for export.", t.id);
+			log_error("{}", message);
+			tc.fail(message);
+			return false;
 		}
 
 		std::string fname = unique_filename(t.file_name, t.id, used_names);
@@ -106,17 +108,20 @@ void export_playlist_run(
 		auto dest = directory / fname;
 		std::ofstream out(dest, std::ios::binary);
 		if(!out) {
-			log_error("export: failed to open {} for writing", dest.string());
-			continue;
+			const auto message = std::format("Failed to open {} for writing.", dest.string());
+			log_error("{}", message);
+			tc.fail(message);
+			return false;
 		}
 		out.write(reinterpret_cast<const char*>(file.rawData.data()), static_cast<std::streamsize>(file.rawData.size()));
+		out.close();
 		if(!out) {
-			log_error("export: write failed for {}", dest.string());
-			written_names[i] = "";
+			const auto message = std::format("Failed to write {}.", dest.string());
+			log_error("{}", message);
+			tc.fail(message);
+			return false;
 		}
 	}
-
-	if(tc.abort) return;
 
 	// Write XSPF
 	task_status.clear_progress();
@@ -154,8 +159,18 @@ void export_playlist_run(
 	auto xspf_path = directory / (xspf_name + ".xspf");
 	std::ofstream xf(xspf_path);
 	if(!xf) {
-		log_error("export: failed to write XSPF to {}", xspf_path.string());
-		return;
+		const auto message = std::format("Failed to open {} for writing.", xspf_path.string());
+		log_error("{}", message);
+		tc.fail(message);
+		return false;
 	}
 	xf << xspf.str();
+	xf.close();
+	if(!xf) {
+		const auto message = std::format("Failed to write {}.", xspf_path.string());
+		log_error("{}", message);
+		tc.fail(message);
+		return false;
+	}
+	return true;
 }
