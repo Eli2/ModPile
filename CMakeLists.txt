@@ -242,6 +242,10 @@ set(hash_util_srcs
 add_executable(ModPile
 	src/db/database_epoch.h
 	src/db/database_epoch.cpp
+	src/db/epoch/epoch.h
+	src/db/epoch/epoch.cpp
+	src/db/epoch/epoch_internal.h
+	src/db/epoch/E000_LegacyEpoch.cpp
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
 	src/audio/loudness_analyzer.h
@@ -433,6 +437,10 @@ add_executable(ModPileTest
 	src/db.cpp
 	src/db/database_epoch.h
 	src/db/database_epoch.cpp
+	src/db/epoch/epoch.h
+	src/db/epoch/epoch.cpp
+	src/db/epoch/epoch_internal.h
+	src/db/epoch/E000_LegacyEpoch.cpp
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
 	src/audio/loudness_analyzer.h

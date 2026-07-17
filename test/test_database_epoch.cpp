@@ -10,6 +10,8 @@
 
 #include "db.h"
 #include "db/database_epoch.h"
+#include "db/epoch/epoch.h"
+#include "db/schema/schema.h"
 
 namespace {
 
@@ -72,6 +74,57 @@ TEST_CASE("negative database epochs cannot be written", "[db][epoch]") {
 	sqlite3 *db = nullptr;
 	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
 	CHECK_FALSE(db_set_database_epoch(db, -1));
+	CHECK(sqlite3_close(db) == SQLITE_OK);
+}
+
+TEST_CASE("epoch 0 schema validation accepts the canonical migrated schema", "[db][epoch][schema]") {
+	sqlite3 *db = nullptr;
+	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
+	REQUIRE(db_migrate(db));
+
+	std::string error;
+	CHECK(db_validate_epoch_schema(db, 0, error));
+	CHECK(error.empty());
+	CHECK(sqlite3_close(db) == SQLITE_OK);
+}
+
+TEST_CASE("epoch 0 schema validation rejects altered or missing expected tables", "[db][epoch][schema]") {
+	sqlite3 *db = nullptr;
+	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
+	REQUIRE(db_migrate(db));
+
+	SECTION("altered table") {
+		REQUIRE(sqlite3_exec(db, "ALTER TABLE meta ADD COLUMN unexpected TEXT", nullptr, nullptr, nullptr) == SQLITE_OK);
+	}
+	SECTION("missing table") {
+		REQUIRE(sqlite3_exec(db, "DROP TABLE modland_meta", nullptr, nullptr, nullptr) == SQLITE_OK);
+	}
+
+	std::string error;
+	CHECK_FALSE(db_validate_epoch_schema(db, 0, error));
+	CHECK_FALSE(error.empty());
+	CHECK(sqlite3_close(db) == SQLITE_OK);
+}
+
+TEST_CASE("epoch schema validation permits unrelated additional tables", "[db][epoch][schema]") {
+	sqlite3 *db = nullptr;
+	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
+	REQUIRE(db_migrate(db));
+	REQUIRE(sqlite3_exec(db, "CREATE TABLE unrelated(id INTEGER)", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+	std::string error;
+	CHECK(db_validate_epoch_schema(db, 0, error));
+	CHECK(error.empty());
+	CHECK(sqlite3_close(db) == SQLITE_OK);
+}
+
+TEST_CASE("unknown database epochs have no schema validator", "[db][epoch][schema]") {
+	sqlite3 *db = nullptr;
+	REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
+
+	std::string error;
+	CHECK_FALSE(db_validate_epoch_schema(db, 999, error));
+	CHECK(error == "Unsupported database epoch: 999");
 	CHECK(sqlite3_close(db) == SQLITE_OK);
 }
 

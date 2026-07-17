@@ -14,6 +14,7 @@
 
 #include "db/schema/schema.h"
 #include "db/database_epoch.h"
+#include "db/epoch/epoch.h"
 #include "util/sqlite_util.h"
 #include "log.h"
 
@@ -165,6 +166,11 @@ DatabaseInitializationResult db_init(const std::filesystem::path &path) {
 
 	if(!db_migrate(db)) {
 		return {false, "Could not migrate the selected database schema."};
+	}
+
+	std::string schema_error;
+	if(!db_validate_epoch_schema(db, MODPILE_DATABASE_EPOCH, schema_error)) {
+		return {false, std::move(schema_error)};
 	}
 
 	// A new database receives its epoch only after its schema was created
