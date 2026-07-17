@@ -24,25 +24,7 @@
 
 namespace {
 
-// IMPORTANT: Do not increase this until libebur128 is made thread-safe.
-//
-// libebur128 1.2.6 stores several derived constants (including
-// relative_gate_factor, minus_twenty_decibels, and histogram boundaries) in
-// writable process-global variables. Every ebur128_init() call writes those
-// globals again, while ebur128_add_frames_*() and ebur128_loudness_global()
-// read them. Consequently, constructing one LoudnessAnalyzer while another is
-// processing audio causes real write/write and read/write data races. Helgrind
-// confirms both kinds of race in the system libebur128.so.1.2.6.
-//
-// Locking only LoudnessAnalyzer construction is NOT sufficient: a later
-// constructor could still rewrite the globals while an earlier analyzer is
-// using them. Safe parallel analysis requires either an upstream/forked
-// libebur128 that initializes these constants exactly once, or serialization
-// of every libebur128 call (which would largely defeat these worker threads).
-// Keep analysis single-threaded until the dependency itself is fixed, then
-// restore the worker count and the concurrent loudness-analyzer test.
-// https://github.com/jiixyj/libebur128/blob/v1.2.6/ebur128/ebur128.c
-constexpr size_t kAnalyzerThreads = 1;
+constexpr size_t kAnalyzerThreads = 4;
 
 enum class AnalysisStatus { Success, Unsupported, Failed, Aborted };
 

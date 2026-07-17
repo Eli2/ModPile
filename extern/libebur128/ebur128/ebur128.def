@@ -2,6 +2,7 @@ LIBRARY EBUR128
 
 EXPORTS
 	ebur128_get_version
+	ebur128_init_library
 	ebur128_init
 	ebur128_destroy
 	ebur128_set_channel

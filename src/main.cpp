@@ -78,6 +78,8 @@ static bool app_full_init(AppState &app) {
 }
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
+	ebur128_init_library();
+
 	*appstate = new AppState;
 	AppState& app = *static_cast<AppState*>(*appstate);
 

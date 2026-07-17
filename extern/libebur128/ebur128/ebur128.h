@@ -116,6 +116,13 @@ typedef struct {
  */
 void ebur128_get_version(int* major, int* minor, int* patch);
 
+/** \brief Initialize process-global library constants.
+ *
+ *  Call this once before creating library states or starting threads that use
+ *  libebur128.
+ */
+void ebur128_init_library(void);
+
 /** \brief Initialize library state.
  *
  *  @param channels the number of channels.
