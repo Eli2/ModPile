@@ -58,7 +58,7 @@ static int64_t now_ms() {
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-static std::optional<int> current_version(sqlite3 *db) {
+std::optional<int> db_schema_version(sqlite3 *db) {
 	const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migration WHERE success = 1";
 	SQLITE_FINALIZE sqlite3_stmt *stmt = nullptr;
 	if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -107,7 +107,7 @@ bool db_migrate(sqlite3 *db) {
 		return false;
 	}
 
-	const auto version = current_version(db);
+	const auto version = db_schema_version(db);
 	if(!version.has_value()) {
 		return false;
 	}

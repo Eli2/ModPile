@@ -2,12 +2,14 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #include "task.h"
 
+#include <atomic>
 #include <variant>
 #include <vector>
 
 #include "blocking_queue.h"
 #include "db_common.h"
 #include "task/analyze.h"
+#include "task/db_import/db_import.h"
 #include "task/export.h"
 #include "task/import.h"
 #include "task/load.h"
@@ -140,6 +142,11 @@ struct ImportPlay {
 	std::filesystem::path path;
 };
 
+struct ImportDatabase {
+	std::filesystem::path path;
+	DatabaseImportOptions options;
+};
+
 struct ExportPlay {
 	std::filesystem::path path;
 };
@@ -166,6 +173,7 @@ using Tasks = std::variant<
 	ModlandListSupportedFormats,
 	ModlandDownloadMissingFiles,
 	ImportPlay,
+	ImportDatabase,
 	ExportPlay,
 	ExportPlaylist,
 	VacuumInto
@@ -177,6 +185,7 @@ static TaskControl      g_taskControl;
 static LockedString     g_currentTaskName;
 static std::mutex       g_taskLifecycleMutex;
 static bool             g_taskAccepting = false;
+static std::atomic_bool g_databaseImportCompleted = false;
 
 static void enqueue_task(Tasks task) {
 	std::lock_guard lock(g_taskLifecycleMutex);
@@ -198,6 +207,7 @@ static std::string task_name(const Tasks &task) {
 		[](const ModlandListSupportedFormats &)   { return std::string("Modland: list formats"); },
 		[](const ModlandDownloadMissingFiles &)   { return std::string("Modland: download missing"); },
 		[](const ImportPlay &t)                   { return std::format("Import play: {}", t.path.filename().string()); },
+		[](const ImportDatabase &t)               { return std::format("Import database: {}", t.path.filename().string()); },
 		[](const ExportPlay &t)                   { return std::format("Export play: {}", t.path.filename().string()); },
 		[](const ExportPlaylist &t)               { return std::format("Export: {}", t.playlist_name); },
 		[](const VacuumInto &t)                   { return std::format("Vacuum into: {}", t.path.filename().string()); },
@@ -205,6 +215,7 @@ static std::string task_name(const Tasks &task) {
 }
 
 void task_init(AppState &app) {
+	g_databaseImportCompleted = false;
 	{
 		std::lock_guard lock(g_taskLifecycleMutex);
 		g_taskQueue.clear();
@@ -258,6 +269,11 @@ void task_init(AppState &app) {
 				},
 				[&](ImportPlay &t){
 					import_playstats(g_taskControl, db, t.path);
+				},
+				[&](ImportDatabase &t){
+					if(import_database(g_taskControl, db, t.path, t.options)) {
+						g_databaseImportCompleted = true;
+					}
 				},
 				[&](ExportPlay &t){
 					export_playstats(g_taskControl, db, t.path);
@@ -365,6 +381,14 @@ void task_modland_download_missing_files() {
 
 void task_import_play(std::filesystem::path path) {
 	enqueue_task(ImportPlay(std::move(path)));
+}
+
+void task_import_database(std::filesystem::path path, DatabaseImportOptions options) {
+	enqueue_task(ImportDatabase{std::move(path), options});
+}
+
+bool task_consume_database_import_completed() {
+	return g_databaseImportCompleted.exchange(false);
 }
 
 void task_export_play(std::filesystem::path path) {

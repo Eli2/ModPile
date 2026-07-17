@@ -84,3 +84,12 @@ bool db_validate_epoch_schema(sqlite3 *db, int epoch, std::string &error_message
 		return false;
 	}
 }
+
+std::optional<int> db_epoch_final_migration_version(int epoch) {
+	switch(epoch) {
+	case 0:
+		return 3;
+	default:
+		return std::nullopt;
+	}
+}

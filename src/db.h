@@ -8,6 +8,14 @@
 #include <string>
 #include <sqlite3.h>
 
+constexpr int32_t modpile_fourcc(char a, char b, char c, char d) {
+	return (int32_t(uint8_t(a)) << 24) | (int32_t(uint8_t(b)) << 16)
+	     | (int32_t(uint8_t(c)) <<  8) |  int32_t(uint8_t(d));
+}
+
+// Stored in SQLite's application_id header field.
+inline constexpr int32_t MODPILE_APPLICATION_ID = modpile_fourcc('M', 'P', 'L', 'E');
+
 struct DatabaseInitializationResult {
 	bool success;
 	std::string error_message;

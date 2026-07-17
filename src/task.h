@@ -5,6 +5,8 @@
 #include "global.h"
 #include "task_util.h"
 
+struct DatabaseImportOptions;
+
 void task_init(AppState &app);
 void task_quit(AppState &app);
 
@@ -29,6 +31,8 @@ void task_pull_modland_file_names();
 void task_pull_modland_list_supported_formats();
 void task_modland_download_missing_files();
 void task_import_play(std::filesystem::path path);
+void task_import_database(std::filesystem::path path, DatabaseImportOptions options);
+bool task_consume_database_import_completed();
 void task_export_play(std::filesystem::path path);
 
 struct ExportTrack {

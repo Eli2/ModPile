@@ -132,26 +132,17 @@ static bool fileExists(sqlite3* DB, std::string id) {
 	}
 }
 
-struct ModMeta {
-	std::string file_name;
-	int64_t     file_size;
-	std::string name;
-	std::string type;
-	int64_t     bpm;
-	int64_t     duration;
-};
-
-static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::byte> data) {
-	
-	auto id = calc_sha1(data);
-	bool exists = fileExists(db, id);
-	
-	auto md5 = calc_md5(data);
+static void db_add_file(
+	sqlite3 *db,
+	const ParsedModuleMetadata &metadata,
+	std::span<std::byte> data
+) {
+	bool exists = fileExists(db, metadata.sha1);
 	
 	//app.indexer.fileName.set(std::format("File: {} -> {}", name, exists ? "Exists": "Adding"));
 	
 	if(exists) {
-		log_debug("File already exists: {}", meta.file_name);
+		log_debug("File already exists: {}", metadata.file_name);
 		return;
 	}
 	
@@ -170,7 +161,7 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 	}
 	double compression = static_cast<double>(bufferView.size()) / static_cast<double>(data.size());
 	
-	log_debug("Adding file comp={:.2f}: {}", compression, meta.file_name);
+	log_debug("Adding file comp={:.2f}: {}", compression, metadata.file_name);
 	
 	SqliteTransaction transaction(db);
 	if(!transaction.active()) {
@@ -193,8 +184,8 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 			return;
 		}
 		
-		sqliteu_bind_string(stmt, 1, id);
-		sqliteu_bind_string(stmt, 2, meta.file_name);
+		sqliteu_bind_string(stmt, 1, metadata.sha1);
+		sqliteu_bind_string(stmt, 2, metadata.file_name);
 		sqlite3_bind_int64 (stmt, 3, data.size());
 		sqlite3_bind_blob  (stmt, 4, bufferView.data(), bufferView.size(), SQLITE_STATIC);
 		
@@ -228,15 +219,15 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 			return;
 		}
 		
-		sqliteu_bind_string(stmt, 1, id);
-		sqliteu_bind_string(stmt, 2, md5);
+		sqliteu_bind_string(stmt, 1, metadata.sha1);
+		sqliteu_bind_string(stmt, 2, metadata.md5);
 		sqlite3_bind_int64 (stmt, 3, 0);
-		sqliteu_bind_string(stmt, 4, meta.file_name);
-		sqlite3_bind_int64 (stmt, 5, meta.file_size);
-		sqliteu_bind_string(stmt, 6, meta.name);
-		sqliteu_bind_string(stmt, 7, meta.type);
-		sqlite3_bind_int64 (stmt, 8, meta.bpm);
-		sqlite3_bind_int64 (stmt, 9, meta.duration);
+		sqliteu_bind_string(stmt, 4, metadata.file_name);
+		sqlite3_bind_int64 (stmt, 5, metadata.file_size);
+		sqliteu_bind_string(stmt, 6, metadata.name);
+		sqliteu_bind_string(stmt, 7, metadata.type);
+		sqlite3_bind_int64 (stmt, 8, metadata.bpm);
+		sqlite3_bind_int64 (stmt, 9, metadata.duration);
 		
 		r = sqlite3_step(stmt);
 		if(r != SQLITE_DONE) {
@@ -250,13 +241,19 @@ static void db_add_file(sqlite3* db, const ModMeta &meta, const std::span<std::b
 	}
 }
 
-bool parseMod(sqlite3* ctx, const std::string fileName, const std::span<std::byte> data) {
-	
-	int r;
-	
+bool parseModMetadata(
+	const std::string &fileName,
+	std::span<const std::byte> data,
+	ParsedModuleMetadata &metadata
+) {
+	metadata = {};
+	metadata.sha1 = calc_sha1(data);
+	metadata.md5 = calc_md5(data);
+	metadata.file_name = fileName;
+	metadata.file_size = data.size();
+
 	CLEAN_XMP xmp_context xmp = xmp_create_context();
-	
-	r = xmp_load_module_from_memory(xmp, data.data(), data.size());
+	const int r = xmp_load_module_from_memory(xmp, data.data(), data.size());
 	if(r < 0) {
 		log_error("xmp error: {} -> {}", fileName.c_str(), xmpu_errstr(r));
 		return false;
@@ -271,17 +268,20 @@ bool parseMod(sqlite3* ctx, const std::string fileName, const std::span<std::byt
 		return false;
 	}
 	
-	ModMeta meta;
-	meta.file_name = fileName;
-	meta.file_size = data.size();
-	meta.name = load_string(mi.mod->name);
-	meta.type = load_string(mi.mod->type);
-	meta.bpm = mi.mod->bpm;
-	meta.duration = mi.seq_data[0].duration;
-	trim(meta.name);
+	metadata.name = load_string(mi.mod->name);
+	metadata.type = load_string(mi.mod->type);
+	metadata.bpm = mi.mod->bpm;
+	metadata.duration = mi.seq_data[0].duration;
+	trim(metadata.name);
 	
 	xmp_release_module(xmp);
 	
-	db_add_file(ctx, meta, data);
+	return true;
+}
+
+bool parseMod(sqlite3* ctx, const std::string fileName, const std::span<std::byte> data) {
+	ParsedModuleMetadata metadata;
+	if(!parseModMetadata(fileName, data, metadata)) return false;
+	db_add_file(ctx, metadata, data);
 	return true;
 }

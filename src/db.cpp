@@ -65,15 +65,6 @@ sqlite3* db_open(const std::filesystem::path &path) {
 	return db;
 }
 
-constexpr int32_t fourcc(char a, char b, char c, char d) {
-	return (int32_t(uint8_t(a)) << 24) | (int32_t(uint8_t(b)) << 16)
-	     | (int32_t(uint8_t(c)) <<  8) |  int32_t(uint8_t(d));
-}
-
-// Stored in the SQLite file header (bytes 60-63). Identifies this as a ModPile database.
-// See: https://www.sqlite.org/pragma.html#pragma_application_id
-static constexpr int32_t MODPILE_APPLICATION_ID = fourcc('M','P','L','E');
-
 static std::optional<bool> db_is_empty(sqlite3 *db) {
 	auto sql = R"(
 		SELECT COUNT(*)

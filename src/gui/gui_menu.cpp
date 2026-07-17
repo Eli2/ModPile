@@ -5,12 +5,16 @@
 
 #include <SDL3/SDL_dialog.h>
 
+#include <mutex>
+#include <optional>
+
 #include "imgui.h"
 
 #include "global.h"
 #include "gui.h"
 #include "log.h"
 #include "task.h"
+#include "task/db_import/db_import.h"
 #include "visualizer.h"
 
 static void add_directory_dialog(AppState &app) {
@@ -29,6 +33,93 @@ static void add_directory_dialog(AppState &app) {
 		}
 	}, &app, app.window, nullptr, true);
 }
+
+namespace {
+
+struct DatabaseImportDialogState {
+	std::mutex mutex;
+	std::optional<std::filesystem::path> pending_path;
+	std::filesystem::path path;
+	std::string error;
+	bool open_options = false;
+	bool open_error = false;
+	DatabaseImportOptions options;
+};
+
+DatabaseImportDialogState g_database_import_dialog;
+
+void select_database_import(AppState &app) {
+	static const SDL_DialogFileFilter filters[] = {{"ModPile Database (*.db)", "db"}};
+	SDL_ShowOpenFileDialog([](void *, const char * const *filelist, int) {
+		if(!filelist || !*filelist) return;
+		std::lock_guard lock(g_database_import_dialog.mutex);
+		g_database_import_dialog.pending_path = std::filesystem::path(*filelist);
+	}, nullptr, app.window, filters, 1, nullptr, false);
+}
+
+void database_import_dialog(AppState &app) {
+	if(task_consume_database_import_completed()) {
+		app.playlist.request.reloadPlaylists = true;
+		app.pile.request.executeQuery = true;
+	}
+
+	std::optional<std::filesystem::path> pending;
+	{
+		std::lock_guard lock(g_database_import_dialog.mutex);
+		pending = std::move(g_database_import_dialog.pending_path);
+		g_database_import_dialog.pending_path.reset();
+	}
+	if(pending) {
+		const auto inspection = inspect_database_import(*pending);
+		g_database_import_dialog.path = std::move(*pending);
+		if(inspection.compatible) {
+			g_database_import_dialog.options = {};
+			g_database_import_dialog.open_options = true;
+		} else {
+			g_database_import_dialog.error = inspection.error_message;
+			g_database_import_dialog.open_error = true;
+		}
+	}
+
+	if(g_database_import_dialog.open_options) {
+		g_database_import_dialog.open_options = false;
+		ImGui::OpenPopup("Import ModPile database");
+	}
+	if(ImGui::BeginPopupModal("Import ModPile database", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("Select the data to add from:");
+		ImGui::TextWrapped("%s", g_database_import_dialog.path.string().c_str());
+		ImGui::Spacing();
+		ImGui::Checkbox("Files", &g_database_import_dialog.options.files);
+		ImGui::Checkbox("Play statistics", &g_database_import_dialog.options.playstats);
+		ImGui::Checkbox("Playlists", &g_database_import_dialog.options.playlists);
+		const bool any = g_database_import_dialog.options.files
+			|| g_database_import_dialog.options.playstats
+			|| g_database_import_dialog.options.playlists;
+		ImGui::Separator();
+		ImGui::BeginDisabled(!any);
+		if(ImGui::Button("Import")) {
+			task_import_database(g_database_import_dialog.path, g_database_import_dialog.options);
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if(ImGui::Button("Abort")) ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+	}
+
+	if(g_database_import_dialog.open_error) {
+		g_database_import_dialog.open_error = false;
+		ImGui::OpenPopup("Database import unavailable");
+	}
+	if(ImGui::BeginPopupModal("Database import unavailable", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("%s", g_database_import_dialog.error.c_str());
+		ImGui::Separator();
+		if(ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+	}
+}
+
+} // namespace
 
 void gui_menu(AppState &app) {
 	if(ImGui::BeginMainMenuBar()) {
@@ -56,6 +147,11 @@ void gui_menu(AppState &app) {
 			}
 			ImGui::SetItemTooltip("Compute loudness (EBU R128) and read metadata for all unanalyzed tracks.");
 			if(ImGui::BeginMenu("Database")) {
+				if(ImGui::MenuItem("Import database...")) {
+					select_database_import(app);
+				}
+				ImGui::SetItemTooltip("Add selected data from a compatible ModPile database.");
+				ImGui::Separator();
 				if(ImGui::MenuItem("Import playstats")) {
 					SDL_ShowOpenFileDialog([](void *userdata, const char * const *filelist, int) {
 						if(filelist && *filelist) {
@@ -180,4 +276,6 @@ void gui_menu(AppState &app) {
 		}
 		ImGui::EndMainMenuBar();
 	}
+
+	database_import_dialog(app);
 }

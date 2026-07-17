@@ -262,6 +262,10 @@ add_executable(ModPile
 	src/task/analyze.h
 	src/task/check.cpp
 	src/task/check.h
+	src/task/db_import/db_import.cpp
+	src/task/db_import/db_import.h
+	src/task/db_import/db_import_internal.h
+	src/task/db_import/E000_to_E000.cpp
 	src/task/export.cpp
 	src/task/export.h
 	src/task/import.cpp
@@ -470,6 +474,10 @@ add_executable(ModPileTest
 	src/db/table/table_import_export.cpp
 	src/task/import.h
 	src/task/import.cpp
+	src/task/db_import/db_import.h
+	src/task/db_import/db_import.cpp
+	src/task/db_import/db_import_internal.h
+	src/task/db_import/E000_to_E000.cpp
 	src/db_common.h
 	src/db_common.cpp
 
@@ -483,6 +491,7 @@ add_executable(ModPileTest
 	test/test_database_epoch.cpp
 	test/test_db_common.cpp
 	test/test_playstats_import_export.cpp
+	test/test_database_import.cpp
 	test/test_table_import_export.cpp
 	test/test_table_import_export_performance.cpp
 	test/test_task_util.cpp
