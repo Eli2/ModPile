@@ -25,7 +25,6 @@ option(MODPILE_USE_SYSTEM_LIBARCHIVE "Use system libarchive" ON)
 option(MODPILE_USE_SYSTEM_LIBXMP     "Use system libxmp"     ON)
 option(MODPILE_USE_SYSTEM_ZSTD       "Use system zstd"       ON)
 option(MODPILE_USE_SYSTEM_SDL        "Use system SDL"        ON)
-option(MODPILE_USE_SYSTEM_EBUR128    "Use system ebur128"    ON)
 option(MODPILE_USE_SYSTEM_KISSFFT    "Use system kissfft"    ON)
 option(MODPILE_USE_SYSTEM_GLM        "Use system glm"        ON)
 option(MODPILE_USE_SYSTEM_OPENAL     "Use system OpenAL"     ON)
@@ -99,22 +98,6 @@ else()
 	set(ALSOFT_UTILS    OFF)
 	set(ALSOFT_INSTALL  OFF)
 	FetchContent_MakeAvailable(openal-soft)
-endif()
-
-if(MODPILE_USE_SYSTEM_EBUR128)
-	pkg_check_modules(ebur128 REQUIRED IMPORTED_TARGET libebur128)
-else()
-	FetchContent_Declare(
-		libebur128
-		GIT_SHALLOW    ON
-		GIT_REPOSITORY https://github.com/jiixyj/libebur128
-		GIT_TAG        67b33abe1558160ed76ada1322329b0e9e058b02 # v1.2.6
-		PATCH_COMMAND  find <SOURCE_DIR> -name "CMakeLists.txt" -exec sed -i "s/cmake_minimum_required([^)]*)/cmake_minimum_required(VERSION 3.13)/" {} +
-	)
-
-	set(ENABLE_TESTS OFF)
-	FetchContent_MakeAvailable(libebur128)
-	target_include_directories(ebur128 PUBLIC ${libebur128_SOURCE_DIR}/ebur128)
 endif()
 
 if(MODPILE_USE_SYSTEM_SDL)

@@ -40,6 +40,7 @@ normalization, and provides a Dear ImGui GUI with docking support.
 ## Building from source
 
 Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
+libebur128 is included in the source tree and built automatically.
 
 ### CMake options
 
@@ -52,7 +53,6 @@ Requires CMake 3.28+ and a C++20 compiler (GCC 12+ or Clang 16+).
 | `MODPILE_USE_SYSTEM_LIBXMP`     | `ON`    | Use system libxmp; set `OFF` to fetch and build from source                       |
 | `MODPILE_USE_SYSTEM_ZSTD`       | `ON`    | Use system zstd; set `OFF` to fetch and build from source                         |
 | `MODPILE_USE_SYSTEM_SDL`        | `ON`    | Use system SDL3/SDL3\_image; set `OFF` to fetch and build from source             |
-| `MODPILE_USE_SYSTEM_EBUR128`    | `ON`    | Use system libebur128; set `OFF` to fetch and build from source                   |
 | `MODPILE_USE_SYSTEM_KISSFFT`    | `ON`    | Use system kissfft; set `OFF` to fetch and build from source                      |
 | `MODPILE_USE_SYSTEM_GLM`        | `ON`    | Use system GLM; set `OFF` to fetch and build from source                          |
 | `MODPILE_USE_SYSTEM_OPENAL`     | `ON`    | Use system OpenAL Soft; set `OFF` to fetch and build from source (1.25.1)         |
@@ -70,7 +70,6 @@ sudo apt install \
     libcurl4-openssl-dev \
     libarchive-dev \
     libxmp-dev \
-    libebur128-dev \
     libsystemd-dev \
     libzstd-dev \
     libkissfft-dev \
@@ -90,7 +89,7 @@ ctest --test-dir build
 
 ### Arch / Manjaro / CachyOS 
 
-Note: `libebur128` and `kissfft` are not in the official repos. Use the flags below to fetch them automatically, or install them from the AUR.
+Note: `kissfft` is not in the official repos. Use the flag below to fetch it automatically, or install it from the AUR.
 
 ```sh
 sudo pacman -S --needed \
@@ -112,7 +111,6 @@ sudo pacman -S --needed \
 ```sh
 cmake -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DMODPILE_USE_SYSTEM_EBUR128=OFF \
     -DMODPILE_USE_SYSTEM_KISSFFT=OFF
 ```
 
@@ -123,7 +121,7 @@ ctest --test-dir build
 
 ### Fedora / Bazzite
 
-Note: `libebur128`, `kissfft`, `zstd`, and `catch2` (v3) are not available in the official repos. Use the flags below to fetch them automatically.
+Note: `kissfft`, `zstd`, and `catch2` (v3) are not available in the official repos. Use the flags below to fetch them automatically.
 
 ```sh
 sudo dnf install \
@@ -143,7 +141,6 @@ sudo dnf install \
 ```sh
 cmake -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DMODPILE_USE_SYSTEM_EBUR128=OFF \
     -DMODPILE_USE_SYSTEM_KISSFFT=OFF \
     -DMODPILE_USE_SYSTEM_ZSTD=OFF \
     -DMODPILE_USE_SYSTEM_CATCH2=OFF
