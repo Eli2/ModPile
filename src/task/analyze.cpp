@@ -272,8 +272,18 @@ void analyze_run(TaskControl &tc, sqlite3 *db) {
 	for(size_t i = 0; i < kAnalyzerThreads; ++i) {
 		workers.push_back(thread_create(std::format("Analyze {}", i + 1), [&, worker = i + 1] {
 			auto worker_status = task_status.scope(std::format("Worker {}", worker));
+			TaskControl::Scope file_status;
+			bool has_file_status = false;
 			while(auto file = jobs.pop()) {
-				auto file_status = worker_status.scope(file->name);
+				// Keep the child scope alive while the worker waits for its next job. Removing
+				// and recreating it here leaves an empty status snapshot between tracks, which
+				// makes the worker's progress bar flicker in the task window.
+				if(has_file_status) {
+					file_status.label(file->name);
+				} else {
+					file_status = worker_status.scope(file->name);
+					has_file_status = true;
+				}
 				AnalysisResult result;
 				try {
 					result = analyze_file(*file, tc.abort, file_status);
