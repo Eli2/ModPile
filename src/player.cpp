@@ -80,7 +80,7 @@ bool player_init(AppState &app) {
 	g_playThread = thread_create("Player", [&]()->void{
 		std::mt19937 rng(std::random_device{}());
 
-		SQLITE_CLOSE sqlite3* db = db_open(app);
+		SQLITE_CLOSE sqlite3* db = db_open(app.config.database.path);
 
 		xmp_context ctx = xmp_create_context();
 		SCOPE_EXIT(

@@ -3,14 +3,18 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <sqlite3.h>
 
-struct AppState;
+struct DatabaseInitializationResult {
+	bool success;
+	std::string error_message;
+};
 
-sqlite3* db_open(const AppState &app);
-bool db_init(AppState &app);
+sqlite3* db_open(const std::filesystem::path &path);
+[[nodiscard]] DatabaseInitializationResult db_init(const std::filesystem::path &path);
 
 struct PlayData {
 	std::string id = "";

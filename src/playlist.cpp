@@ -446,7 +446,7 @@ static void move_track(const AppState::Playlist::Request::MoveTrack &req) {
 }
 
 void playlist_init(AppState &app) {
-	g_playlistConnection = db_open(app);
+	g_playlistConnection = db_open(app.config.database.path);
 	if(g_playlistConnection) {
 		load_playlists(app);
 	}

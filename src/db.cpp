@@ -13,7 +13,7 @@
 #include <sqlite3.h>
 
 #include "db/schema/schema.h"
-#include "global.h"
+#include "db/database_epoch.h"
 #include "util/sqlite_util.h"
 #include "log.h"
 
@@ -40,11 +40,9 @@ static void enable_pragmas(sqlite3* db) {
 	exec(db, sql);
 }
 
-sqlite3* db_open(const AppState & app) {
+sqlite3* db_open(const std::filesystem::path &path) {
 	
 	int r;
-	
-	auto dbPath = app.config.database.path;
 	
 	int flags = 0;
 	flags |= SQLITE_OPEN_EXRESCODE;
@@ -54,7 +52,7 @@ sqlite3* db_open(const AppState & app) {
 	flags |= SQLITE_OPEN_NOFOLLOW;
 	
 	sqlite3* db;
-	r = sqlite3_open_v2(dbPath.c_str(), &db, flags, nullptr);
+	r = sqlite3_open_v2(path.c_str(), &db, flags, nullptr);
 	if (r != SQLITE_OK) {
 		log_error("Error open DB: {} ({})", sqlite3_errmsg(db), r);
 		sqlite3_close(db);
@@ -97,12 +95,14 @@ static std::optional<bool> db_is_empty(sqlite3 *db) {
 	return sqlite3_column_int64(stmt, 0) == 0;
 }
 
-bool db_init(AppState &app) {
+DatabaseInitializationResult db_init(const std::filesystem::path &path) {
 
-	SQLITE_CLOSE sqlite3* db = db_open(app);
+	SQLITE_CLOSE sqlite3* db = db_open(path);
 	if(!db) {
-		return false;
+		return {false, "Could not open the selected database file."};
 	}
+
+	bool fresh_database = false;
 
 	// Verify (or stamp) the application_id so we don't accidentally pollute a foreign database.
 	{
@@ -110,48 +110,71 @@ bool db_init(AppState &app) {
 		int32_t app_id = 0;
 		if(sqlite3_prepare_v2(db, "PRAGMA application_id", -1, &stmt, nullptr) != SQLITE_OK) {
 			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
-			app.setup.error_message = "Could not inspect the selected database file.";
-			return false;
+			return {false, "Could not inspect the selected database file."};
 		}
 		if(sqlite3_step(stmt) == SQLITE_ROW) {
 			app_id = sqlite3_column_int(stmt, 0);
 		} else {
 			log_error("Failed to read database application_id: {}", sqlite3_errmsg(db));
-			app.setup.error_message = "Could not inspect the selected database file.";
-			return false;
+			return {false, "Could not inspect the selected database file."};
 		}
 
 		if(app_id == 0) {
 			auto empty = db_is_empty(db);
 			if(!empty.has_value()) {
-				app.setup.error_message = "Could not inspect the selected database file.";
-				return false;
+				return {false, "Could not inspect the selected database file."};
 			}
 			if(!empty.value()) {
 				log_error("Refusing to stamp database with unset application_id because it is not empty");
-				app.setup.error_message = "That database is not empty and is not marked as a ModPile database.";
-				return false;
+				return {false, "That database is not empty and is not marked as a ModPile database."};
 			}
+			fresh_database = true;
 
 			// Fresh empty database — stamp it as ours.
 			auto sql = std::format("PRAGMA application_id = {}", MODPILE_APPLICATION_ID);
 			if(!exec(db, sql.c_str())) {
-				app.setup.error_message = "Could not mark the selected database file as a ModPile database.";
-				return false;
+				return {false, "Could not mark the selected database file as a ModPile database."};
 			}
 		} else if(app_id != MODPILE_APPLICATION_ID) {
 			log_error("Refusing to open database: application_id 0x{:08X} does not match ModPile (0x{:08X})",
 				static_cast<uint32_t>(app_id), static_cast<uint32_t>(MODPILE_APPLICATION_ID));
-			app.setup.error_message = "That file belongs to a different application and cannot be opened as a ModPile database.";
-			return false;
+			return {false, "That file belongs to a different application and cannot be opened as a ModPile database."};
+		}
+	}
+
+	// user_version is a database-format epoch, not a migration counter. Never
+	// open an existing database from another epoch in place: conversion across
+	// this boundary belongs to the explicit import operation.
+	if(!fresh_database) {
+		int actual_epoch = 0;
+		switch(db_check_database_epoch(db, MODPILE_DATABASE_EPOCH, actual_epoch)) {
+		case DatabaseEpochCheck::compatible:
+			break;
+		case DatabaseEpochCheck::incompatible:
+			log_error("Refusing to open database epoch {} with application epoch {}",
+				actual_epoch, MODPILE_DATABASE_EPOCH);
+			return {false, std::format(
+				"This database uses incompatible format epoch {}. This ModPile version requires epoch {}. "
+				"Use the database import operation instead of opening it directly.",
+				actual_epoch, MODPILE_DATABASE_EPOCH)};
+		case DatabaseEpochCheck::error:
+			log_error("Failed to read database user_version: {}", sqlite3_errmsg(db));
+			return {false, "Could not inspect the selected database format version."};
 		}
 	}
 
 	if(!db_migrate(db)) {
-		return false;
+		return {false, "Could not migrate the selected database schema."};
 	}
 
-	return true;
+	// A new database receives its epoch only after its schema was created
+	// successfully. Existing databases were checked before migrations above.
+	if(fresh_database && !db_set_database_epoch(db, MODPILE_DATABASE_EPOCH)) {
+		log_error("Failed to set database user_version: {}", sqlite3_errmsg(db));
+		return {false, "Could not record the selected database format version."};
+	}
+
+	return {true, {}};
 }
 
 void updatePlayback(sqlite3* db, const PlayData &pd) {

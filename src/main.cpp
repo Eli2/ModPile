@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <utility>
 
 #define SDL_MAIN_USE_CALLBACKS 1  /* use the callbacks instead of main() */
 #include <SDL3/SDL.h>
@@ -24,6 +25,7 @@
 #include "query.h"
 #include "db.h"
 #include "global.h"
+#include "version_config.h"
 #include "gui/gui.h"
 #include "log.h"
 #include "mpris.h"
@@ -54,7 +56,9 @@ static void app_full_quit(AppState &app) {
 // Initialize all subsystems that require a configured database path.
 // Called either from AppInit (path already known) or from AppIterate (after setup).
 static bool app_full_init(AppState &app) {
-	if(!db_init(app)) {
+	auto database_result = db_init(app.config.database.path);
+	if(!database_result.success) {
+		app.setup.error_message = std::move(database_result.error_message);
 		return false;
 	}
 	player_init(app);
@@ -81,7 +85,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
 	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 
-	SDL_SetAppMetadata("ModPile", "0.0.1", "de.eli2.ModPile");
+	SDL_SetAppMetadata("ModPile", MODPILE_VERSION, "de.eli2.ModPile");
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		log_error("Couldn't initialize SDL: {}", SDL_GetError());

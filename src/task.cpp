@@ -212,7 +212,7 @@ void task_init(AppState &app) {
 	}
 
 	g_taskThread = thread_create("db_task", [&](){
-		SQLITE_CLOSE sqlite3* db = db_open(app);
+		SQLITE_CLOSE sqlite3* db = db_open(app.config.database.path);
 		if(!db) {
 			log_error("Failed to open task DB connection");
 			return;

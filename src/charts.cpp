@@ -129,7 +129,7 @@ static void load_charts(AppState &app, AppState::Charts::Criterion criterion) {
 }
 
 bool charts_init(AppState &app) {
-	g_chartsConnection = db_open(app);
+	g_chartsConnection = db_open(app.config.database.path);
 	return g_chartsConnection != nullptr;
 }
 

@@ -145,7 +145,7 @@ static void query(const Query &query, Response &response) {
 
 void db_query_init(AppState &app) {
 
-	g_queryConnection = db_open(app);
+	g_queryConnection = db_open(app.config.database.path);
 	if(!g_queryConnection) {
 		log_error("Failed to open query DB connection");
 		return;

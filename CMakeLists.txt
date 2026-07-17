@@ -11,6 +11,12 @@ project(
 	LANGUAGES C CXX
 )
 
+configure_file(
+	src/version_config.h.in
+	${CMAKE_CURRENT_BINARY_DIR}/generated/version_config.h
+	@ONLY
+)
+
 set(MODPILE_SANITIZE none CACHE STRING "Enable Sanitizers")
 set_property(CACHE MODPILE_SANITIZE PROPERTY STRINGS none address thread undefined)
 
@@ -234,6 +240,8 @@ set(hash_util_srcs
 )
 
 add_executable(ModPile
+	src/db/database_epoch.h
+	src/db/database_epoch.cpp
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
 	src/audio/loudness_analyzer.h
@@ -347,6 +355,7 @@ target_include_directories(ModPile PRIVATE
 	src/
 	src/gui/
 	src/visualizer/
+	${CMAKE_CURRENT_BINARY_DIR}/generated/
 )
 
 target_compile_options(ModPile PRIVATE
@@ -420,6 +429,10 @@ endif()
 
 add_executable(ModPileTest
 	${hash_util_srcs}
+	src/db.h
+	src/db.cpp
+	src/db/database_epoch.h
+	src/db/database_epoch.cpp
 	src/audio/duration_analyzer.h
 	src/audio/duration_analyzer.cpp
 	src/audio/loudness_analyzer.h
@@ -459,6 +472,7 @@ add_executable(ModPileTest
 	test/test_blocking_queue.cpp
 	test/test_str_util.cpp
 	test/test_db_migrate.cpp
+	test/test_database_epoch.cpp
 	test/test_db_common.cpp
 	test/test_playstats_import_export.cpp
 	test/test_table_import_export.cpp
@@ -473,6 +487,7 @@ target_compile_features(ModPileTest PRIVATE
 )
 target_include_directories(ModPileTest PRIVATE
 	src/
+	${CMAKE_CURRENT_BINARY_DIR}/generated/
 )
 target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
