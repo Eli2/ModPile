@@ -222,7 +222,9 @@ bool player_init(AppState &app) {
 		};
 		
 		auto closeDev = [&]()->auto {
-			if(alEfxAvail) {
+			if(!alDevice) return;
+
+			if(alContext && alEfxAvail) {
 				alSourcei(alSource, AL_DIRECT_FILTER, AL_FILTER_NULL);
 				alSource3i(alSource, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
 				alAuxSloti_(alAuxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
@@ -233,11 +235,15 @@ bool player_init(AppState &app) {
 				alEfxAvail     = false;
 				alEqConnected  = false;
 			}
-			alDeleteSources(1, &alSource);
-			AL_CHECK;
-			alDeleteBuffers(alBuffers.size(), alBuffers.data());
-			AL_CHECK;
-			alcMakeContextCurrent(NULL);
+			if(alContext) {
+				alDeleteSources(1, &alSource);
+				AL_CHECK;
+				alDeleteBuffers(alBuffers.size(), alBuffers.data());
+				AL_CHECK;
+				alcMakeContextCurrent(NULL);
+			}
+			alSource = 0;
+			alBuffers.fill(0);
 			
 			if(alContext)
 				alcDestroyContext(alContext);
@@ -747,43 +753,59 @@ bool player_init(AppState &app) {
 		};
 		
 		auto playEnd = [&]()->auto{
-			
-			ALint sourceState;
-			alGetSourcei(alSource, AL_SOURCE_STATE, &sourceState);
-			if(sourceState == AL_PAUSED) {
-				alSourceStop(alSource);
-			}
-			// AL_STOPPED: source ran out of buffers naturally -- drain loop exits immediately.
-			// AL_PLAYING: still consuming buffers -- drain loop will wait for them.
-			
-			// Drain buffers
-			auto drainDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-			bool drainTimedOut = false;
-			while(!drainTimedOut) {
-				ALint buffersQueued;
-				alGetSourcei(alSource, AL_BUFFERS_QUEUED, &buffersQueued);
-				if(buffersQueued == 0) {
-					break;
-				}
+			const bool finishQueuedAudio = !nextWasRequested && !prevWasRequested
+				&& !stopAfterPlayEnd && !g_quitRequest;
 
-				ALint val;
-				alGetSourcei(alSource, AL_BUFFERS_PROCESSED, &val);
-				while (val <= 0) {
-					if (std::chrono::steady_clock::now() > drainDeadline) {
-						log_error("AL buffer drain timed out");
+			// Preserve the tail of a naturally completed track. Explicit stop/skip
+			// requests discard queued audio immediately.
+			bool drainTimedOut = false;
+			if(finishQueuedAudio) {
+				const auto drainDeadline =
+					std::chrono::steady_clock::now() + std::chrono::seconds(5);
+				while(!drainTimedOut) {
+					ALint buffersQueued;
+					alGetSourcei(alSource, AL_BUFFERS_QUEUED, &buffersQueued);
+					if(buffersQueued == 0) break;
+
+					ALint processed;
+					alGetSourcei(alSource, AL_BUFFERS_PROCESSED, &processed);
+					if(processed > 0) {
+						ALuint buffer;
+						alSourceUnqueueBuffers(alSource, 1, &buffer);
+						continue;
+					}
+
+					if(std::chrono::steady_clock::now() > drainDeadline) {
+						log_error("AL buffer drain timed out; forcing source reset");
 						drainTimedOut = true;
 						break;
 					}
 					sleep_for(10ms);
-					alGetSourcei(alSource, AL_BUFFERS_PROCESSED, &val);
-				}
-				if (!drainTimedOut) {
-					ALuint buffer;
-					alSourceUnqueueBuffers(alSource, 1, &buffer);
 				}
 			}
+
+			// Stopping makes all queued buffers processed. Always detach every buffer
+			// before the next track attempts to refill the fixed buffer array.
+			while(alGetError() != AL_NO_ERROR) {}
+			alSourceStop(alSource);
+			bool sourceResetOk = alGetError() == AL_NO_ERROR;
+			ALint buffersQueued = 0;
+			if(sourceResetOk) {
+				alGetSourcei(alSource, AL_BUFFERS_QUEUED, &buffersQueued);
+				sourceResetOk = alGetError() == AL_NO_ERROR;
+			}
+			while(sourceResetOk && buffersQueued-- > 0) {
+				ALuint buffer;
+				alSourceUnqueueBuffers(alSource, 1, &buffer);
+				sourceResetOk = alGetError() == AL_NO_ERROR;
+			}
+			if(!sourceResetOk) {
+				log_error("Failed to reset OpenAL source queue; recreating audio device");
+			}
 			
-			alSourcef(alSource, AL_GAIN, 0.f);
+			if(sourceResetOk) {
+				alSourcef(alSource, AL_GAIN, 0.f);
+			}
 			
 			xmp_end_player(ctx);
 			xmp_release_module(ctx);
@@ -812,6 +834,15 @@ bool player_init(AppState &app) {
 			}
 			
 			updatePlayback(db, pd);
+
+			if(!sourceResetOk) {
+				closeDev();
+				if(g_quitRequest || stopAfterPlayEnd) {
+					stopAfterPlayEnd = false;
+					return State::Stopped;
+				}
+				return openDev();
+			}
 			
 			if(g_quitRequest) {
 				return State::Stopped;
