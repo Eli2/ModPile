@@ -62,11 +62,13 @@ void config_load(AppState &app) {
 	if(auto v = r.get_float("player", "target_loudness")) app.config.player.target_loudness = *v;
 	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.player.state.skip_trailing_silence = *v;
 
-	if(auto v = r.get_float("eq", "low"))     app.player.state.eq_low.store(static_cast<float>(*v));
-	if(auto v = r.get_float("eq", "mid1"))    app.player.state.eq_mid1.store(static_cast<float>(*v));
-	if(auto v = r.get_float("eq", "mid2"))    app.player.state.eq_mid2.store(static_cast<float>(*v));
-	if(auto v = r.get_float("eq", "high"))    app.player.state.eq_high.store(static_cast<float>(*v));
-	if(auto v = r.get_bool ("eq", "enabled")) app.player.state.eq_enabled.store(*v);
+	auto equalizer = app.player.state.equalizer.load();
+	if(auto v = r.get_float("eq", "low"))     equalizer.low = static_cast<float>(*v);
+	if(auto v = r.get_float("eq", "mid1"))    equalizer.mid1 = static_cast<float>(*v);
+	if(auto v = r.get_float("eq", "mid2"))    equalizer.mid2 = static_cast<float>(*v);
+	if(auto v = r.get_float("eq", "high"))    equalizer.high = static_cast<float>(*v);
+	if(auto v = r.get_bool ("eq", "enabled")) equalizer.enabled = *v;
+	app.player.state.equalizer.store(equalizer);
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
@@ -100,12 +102,13 @@ void config_save(AppState &app) {
 	w.write("target_loudness",  app.config.player.target_loudness);
 	w.write("skip_trailing_silence", app.player.state.skip_trailing_silence.load());
 
+	const auto equalizer = app.player.state.equalizer.load();
 	w.section("eq");
-	w.write("enabled", app.player.state.eq_enabled.load());
-	w.write("low",     static_cast<double>(app.player.state.eq_low.load()));
-	w.write("mid1",    static_cast<double>(app.player.state.eq_mid1.load()));
-	w.write("mid2",    static_cast<double>(app.player.state.eq_mid2.load()));
-	w.write("high",    static_cast<double>(app.player.state.eq_high.load()));
+	w.write("enabled", equalizer.enabled);
+	w.write("low",     static_cast<double>(equalizer.low));
+	w.write("mid1",    static_cast<double>(equalizer.mid1));
+	w.write("mid2",    static_cast<double>(equalizer.mid2));
+	w.write("high",    static_cast<double>(equalizer.high));
 	
 	if(!w.save(g_configFile)) {
 		log_error("Failed to write config file: {}", g_configFile.string());

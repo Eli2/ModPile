@@ -52,7 +52,7 @@ namespace {
 
 class OpenAlEqualizer {
 public:
-	explicit OpenAlEqualizer(AppState::Player::State &settings)
+	explicit OpenAlEqualizer(std::atomic<AppState::Player::EqualizerSettings> &settings)
 		: settings_(settings)
 	{}
 
@@ -68,10 +68,11 @@ public:
 		alGenAuxSlots_(1, &auxSlot_);
 		alGenEffects_(1, &effect_);
 		alEffecti_(effect_, AL_EFFECT_TYPE, AL_EFFECT_EQUALIZER);
-		previousLow_  = settings_.eq_low.load();
-		previousMid1_ = settings_.eq_mid1.load();
-		previousMid2_ = settings_.eq_mid2.load();
-		previousHigh_ = settings_.eq_high.load();
+		const auto settings = settings_.load();
+		previousLow_  = settings.low;
+		previousMid1_ = settings.mid1;
+		previousMid2_ = settings.mid2;
+		previousHigh_ = settings.high;
 		alEffectf_(effect_, AL_EQUALIZER_LOW_GAIN,  previousLow_);
 		alEffectf_(effect_, AL_EQUALIZER_MID1_GAIN, previousMid1_);
 		alEffectf_(effect_, AL_EQUALIZER_MID2_GAIN, previousMid2_);
@@ -85,7 +86,7 @@ public:
 		alFilterf_(silentFilter_, AL_LOWPASS_GAIN,   0.0f);
 		alFilterf_(silentFilter_, AL_LOWPASS_GAINHF, 0.0f);
 
-		connected_ = settings_.eq_enabled.load();
+		connected_ = settings.enabled;
 		if(connected_) {
 			alSource3i(source_, AL_AUXILIARY_SEND_FILTER,
 				static_cast<ALint>(auxSlot_), 0, AL_FILTER_NULL);
@@ -102,16 +103,17 @@ public:
 	void update() {
 		if(!available_) return;
 
+		const auto settings = settings_.load();
 		bool changed = false;
-		update_band(settings_.eq_low, previousLow_, AL_EQUALIZER_LOW_GAIN, changed);
-		update_band(settings_.eq_mid1, previousMid1_, AL_EQUALIZER_MID1_GAIN, changed);
-		update_band(settings_.eq_mid2, previousMid2_, AL_EQUALIZER_MID2_GAIN, changed);
-		update_band(settings_.eq_high, previousHigh_, AL_EQUALIZER_HIGH_GAIN, changed);
+		update_band(settings.low, previousLow_, AL_EQUALIZER_LOW_GAIN, changed);
+		update_band(settings.mid1, previousMid1_, AL_EQUALIZER_MID1_GAIN, changed);
+		update_band(settings.mid2, previousMid2_, AL_EQUALIZER_MID2_GAIN, changed);
+		update_band(settings.high, previousHigh_, AL_EQUALIZER_HIGH_GAIN, changed);
 		if(changed) {
 			alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
 		}
 
-		const bool shouldConnect = settings_.eq_enabled.load();
+		const bool shouldConnect = settings.enabled;
 		if(shouldConnect != connected_) {
 			connected_ = shouldConnect;
 			const ALint slot = connected_
@@ -161,12 +163,11 @@ private:
 	}
 
 	void update_band(
-		std::atomic<float> &setting,
+		float value,
 		float &previous,
 		ALenum parameter,
 		bool &changed)
 	{
-		const float value = setting.load();
 		if(value == previous) return;
 
 		previous = value;
@@ -181,7 +182,7 @@ private:
 	bool available_ = false;
 	bool connected_ = false;
 
-	AppState::Player::State &settings_;
+	std::atomic<AppState::Player::EqualizerSettings> &settings_;
 	float previousLow_ = -1.f;
 	float previousMid1_ = -1.f;
 	float previousMid2_ = -1.f;
@@ -252,7 +253,7 @@ bool player_init(AppState &app) {
 		ALCcontext           *alContext = nullptr;
 		ALuint                alSource  = 0;
 		std::array<ALuint, 6> alBuffers = {};
-		OpenAlEqualizer equalizer(app.player.state);
+		OpenAlEqualizer equalizer(app.player.state.equalizer);
 		
 		auto openDev = [&]()->auto {
 			alDevice = alcOpenDevice(NULL);

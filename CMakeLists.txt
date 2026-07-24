@@ -385,6 +385,7 @@ target_link_libraries(ModPile PRIVATE
 	imgui::imgui
 	OpenAL::OpenAL
 	ebur128
+	atomic
 	CURL::libcurl
 	glad::glad
 	kissfft::kissfft-float
@@ -499,6 +500,7 @@ target_link_libraries(ModPileTest PRIVATE
 	Catch2::Catch2WithMain
 	SQLite::SQLite3
 	ebur128
+	atomic
 )
 if(MODPILE_USE_SYSTEM_ZSTD)
 	target_link_libraries(ModPileTest PRIVATE zstd::libzstd_shared)

@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "util/ring_buffer.h"
@@ -73,6 +74,15 @@ struct AppState {
 		std::atomic_bool switch_database = false;
 	} request;
 	struct Player {
+		struct EqualizerSettings {
+			bool enabled = true;
+			float low  = 1.0f;
+			float mid1 = 1.0f;
+			float mid2 = 1.0f;
+			float high = 1.0f;
+		};
+		static_assert(std::is_trivially_copyable_v<EqualizerSettings>);
+
 		struct Request {
 			std::atomic_bool prev = false;
 			std::atomic_bool play = false;
@@ -110,11 +120,7 @@ struct AppState {
 			std::atomic<float>   stereo_width = 0.4f;
 			std::atomic<int64_t> current_playlist_track_id = 0;
 			std::atomic<int64_t> current_playing_playlist_id = 0;
-			std::atomic<float>   eq_low  = 1.0f;
-			std::atomic<float>   eq_mid1 = 1.0f;
-			std::atomic<float>   eq_mid2 = 1.0f;
-			std::atomic<float>   eq_high = 1.0f;
-			std::atomic<bool>    eq_enabled = true;
+			std::atomic<EqualizerSettings> equalizer = EqualizerSettings{};
 			std::atomic<bool>    skip_trailing_silence = true;
 			std::atomic<bool>    in_charts_mode = false;
 		} state;
