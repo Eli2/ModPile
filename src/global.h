@@ -75,11 +75,14 @@ struct AppState {
 	} request;
 	struct Player {
 		struct EqualizerSettings {
+			static constexpr float min_db = -18.0f;
+			static constexpr float max_db = 18.0f;
+
 			bool enabled = true;
-			float low  = 1.0f;
-			float mid1 = 1.0f;
-			float mid2 = 1.0f;
-			float high = 1.0f;
+			float low_db  = 0.0f;
+			float mid1_db = 0.0f;
+			float mid2_db = 0.0f;
+			float high_db = 0.0f;
 
 			bool operator==(const EqualizerSettings &) const = default;
 		};

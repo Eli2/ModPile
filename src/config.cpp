@@ -4,6 +4,7 @@
 #include "log.h"
 #include "util/toml.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <SDL3/SDL_stdinc.h>
@@ -63,10 +64,16 @@ void config_load(AppState &app) {
 	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.player.state.skip_trailing_silence = *v;
 
 	auto equalizer = app.player.state.equalizer.load();
-	if(auto v = r.get_float("eq", "low"))     equalizer.low = static_cast<float>(*v);
-	if(auto v = r.get_float("eq", "mid1"))    equalizer.mid1 = static_cast<float>(*v);
-	if(auto v = r.get_float("eq", "mid2"))    equalizer.mid2 = static_cast<float>(*v);
-	if(auto v = r.get_float("eq", "high"))    equalizer.high = static_cast<float>(*v);
+	auto clamp_db = [](double value) {
+		return std::clamp(
+			static_cast<float>(value),
+			AppState::Player::EqualizerSettings::min_db,
+			AppState::Player::EqualizerSettings::max_db);
+	};
+	if(auto v = r.get_float("eq", "low"))     equalizer.low_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "mid1"))    equalizer.mid1_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "mid2"))    equalizer.mid2_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "high"))    equalizer.high_db = clamp_db(*v);
 	if(auto v = r.get_bool ("eq", "enabled")) equalizer.enabled = *v;
 	app.player.state.equalizer.store(equalizer);
 }
@@ -105,10 +112,10 @@ void config_save(AppState &app) {
 	const auto equalizer = app.player.state.equalizer.load();
 	w.section("eq");
 	w.write("enabled", equalizer.enabled);
-	w.write("low",     static_cast<double>(equalizer.low));
-	w.write("mid1",    static_cast<double>(equalizer.mid1));
-	w.write("mid2",    static_cast<double>(equalizer.mid2));
-	w.write("high",    static_cast<double>(equalizer.high));
+	w.write("low",     static_cast<double>(equalizer.low_db));
+	w.write("mid1",    static_cast<double>(equalizer.mid1_db));
+	w.write("mid2",    static_cast<double>(equalizer.mid2_db));
+	w.write("high",    static_cast<double>(equalizer.high_db));
 	
 	if(!w.save(g_configFile)) {
 		log_error("Failed to write config file: {}", g_configFile.string());

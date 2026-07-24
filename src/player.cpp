@@ -99,11 +99,23 @@ class OpenAlEqualizer {
 		return ok;
 	}
 
+	static float db_to_gain(float db, float min_gain, float max_gain) {
+		const float clampedDb = std::clamp(
+			db,
+			AppState::Player::EqualizerSettings::min_db,
+			AppState::Player::EqualizerSettings::max_db);
+		return std::clamp(std::pow(10.0f, clampedDb / 20.0f), min_gain, max_gain);
+	}
+
 	void apply_gains(const AppState::Player::EqualizerSettings &settings) {
-		m_alEffectf(m_effect, AL_EQUALIZER_LOW_GAIN,  settings.low);
-		m_alEffectf(m_effect, AL_EQUALIZER_MID1_GAIN, settings.mid1);
-		m_alEffectf(m_effect, AL_EQUALIZER_MID2_GAIN, settings.mid2);
-		m_alEffectf(m_effect, AL_EQUALIZER_HIGH_GAIN, settings.high);
+		m_alEffectf(m_effect, AL_EQUALIZER_LOW_GAIN,
+			db_to_gain(settings.low_db, AL_EQUALIZER_MIN_LOW_GAIN, AL_EQUALIZER_MAX_LOW_GAIN));
+		m_alEffectf(m_effect, AL_EQUALIZER_MID1_GAIN,
+			db_to_gain(settings.mid1_db, AL_EQUALIZER_MIN_MID1_GAIN, AL_EQUALIZER_MAX_MID1_GAIN));
+		m_alEffectf(m_effect, AL_EQUALIZER_MID2_GAIN,
+			db_to_gain(settings.mid2_db, AL_EQUALIZER_MIN_MID2_GAIN, AL_EQUALIZER_MAX_MID2_GAIN));
+		m_alEffectf(m_effect, AL_EQUALIZER_HIGH_GAIN,
+			db_to_gain(settings.high_db, AL_EQUALIZER_MIN_HIGH_GAIN, AL_EQUALIZER_MAX_HIGH_GAIN));
 		m_alAuxSloti(m_auxSlot, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(m_effect));
 	}
 

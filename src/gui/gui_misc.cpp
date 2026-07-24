@@ -3,7 +3,6 @@
 #include "gui_misc.h"
 
 #include <algorithm>
-#include <cmath>
 #include "glad/glad.h"
 #include "imgui.h"
 
@@ -125,7 +124,7 @@ void gui_equalizer(AppState &app) {
 		changed |= ImGui::Checkbox("EQ", &settings.enabled);
 		ImGui::SameLine();
 		if(ImGui::Button("Reset")) {
-			settings.low = settings.mid1 = settings.mid2 = settings.high = 1.0f;
+			settings.low_db = settings.mid1_db = settings.mid2_db = settings.high_db = 0.0f;
 			changed = true;
 		}
 	}
@@ -133,22 +132,27 @@ void gui_equalizer(AppState &app) {
 		struct Band {
 			const char* label;
 			const char* freq;
-			float&      gain;
+			float&      db;
 		};
 		Band bands[] = {
-			{"Low",  "~200Hz", settings.low},
-			{"Mid1", "~500Hz", settings.mid1},
-			{"Mid2", "~3kHz",  settings.mid2},
-			{"High", "~4kHz",  settings.high},
+			{"Low",  "~200Hz", settings.low_db},
+			{"Mid1", "~500Hz", settings.mid1_db},
+			{"Mid2", "~3kHz",  settings.mid2_db},
+			{"High", "~4kHz",  settings.high_db},
 		};
 		const float sliderHeight = 150.0f;
 		for(int i = 0; i < 4; i++) {
 			if(i > 0) ImGui::SameLine();
 			ImGui::BeginGroup();
-			float db = 20.0f * std::log10(bands[i].gain);
 			ImGui::PushID(i);
-			if(ImGui::VSliderFloat("##eq", ImVec2(40, sliderHeight), &db, -18.0f, 18.0f, "%.1f")) {
-				bands[i].gain = std::clamp(std::pow(10.0f, db / 20.0f), 0.126f, 7.943f);
+			if(ImGui::VSliderFloat(
+				"##eq",
+				ImVec2(40, sliderHeight),
+				&bands[i].db,
+				AppState::Player::EqualizerSettings::min_db,
+				AppState::Player::EqualizerSettings::max_db,
+				"%+5.1f"))
+			{
 				changed = true;
 			}
 			ImGui::PopID();
