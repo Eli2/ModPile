@@ -160,9 +160,9 @@ TEST_CASE("TOML writer serializes supported values in call order", "[toml][write
 	TomlWriter writer;
 	writer.section("first");
 	writer.write("text", std::string_view("hello"));
-	writer.write("integer", int64_t{-7});
-	writer.write_hex("hex", 0x2a);
-	writer.write("float", 1.25);
+	writer.write("integer", int{-7});
+	writer.write_hex("hex", uint16_t{0x2a});
+	writer.write("float", float{1.25});
 	writer.write("enabled", true);
 	writer.section("second");
 	writer.write("disabled", false);

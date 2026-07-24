@@ -111,8 +111,8 @@ void config_save(AppState &app) {
 	w.write("path", app.config.database.path.string());
 
 	w.section("window");
-	w.write("width",  static_cast<int64_t>(app.config.window.width));
-	w.write("height", static_cast<int64_t>(app.config.window.height));
+	w.write("width",  app.config.window.width);
+	w.write("height", app.config.window.height);
 
 	w.section("numblock");
 	w.write("enabled", app.config.numblock.enabled);
@@ -120,18 +120,18 @@ void config_save(AppState &app) {
 	w.write_hex("pid", app.config.numblock.pid);
 
 	w.section("player");
-	w.write("gain",             static_cast<double>(app.config.player.gain.load()));
-	w.write("stereo_width",     static_cast<double>(app.config.player.stereo_width.load()));
+	w.write("gain",             app.config.player.gain.load());
+	w.write("stereo_width",     app.config.player.stereo_width.load());
 	w.write("target_loudness",  app.config.player.target_loudness);
 	w.write("skip_trailing_silence", app.config.player.skip_trailing_silence.load());
 
 	const auto equalizer = app.config.player.equalizer.load();
 	w.section("eq");
 	w.write("enabled", equalizer.enabled);
-	w.write("low",     static_cast<double>(equalizer.low_db));
-	w.write("mid1",    static_cast<double>(equalizer.mid1_db));
-	w.write("mid2",    static_cast<double>(equalizer.mid2_db));
-	w.write("high",    static_cast<double>(equalizer.high_db));
+	w.write("low",     equalizer.low_db);
+	w.write("mid1",    equalizer.mid1_db);
+	w.write("mid2",    equalizer.mid2_db);
+	w.write("high",    equalizer.high_db);
 	
 	if(!w.save(g_configFile)) {
 		log_error("Failed to write config file: {}", g_configFile.string());

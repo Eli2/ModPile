@@ -2,11 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #pragma once
 
+#include <concepts>
 #include <filesystem>
 #include <iosfwd>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -54,6 +56,23 @@ public:
 	void write_hex(std::string_view key, int64_t        value); // integer as 0x…
 	void write(std::string_view key, double             value);
 	void write(std::string_view key, bool               value);
+
+	template<std::integral T>
+		requires (!std::same_as<std::remove_cv_t<T>, bool>)
+	void write(std::string_view key, T value) {
+		write(key, static_cast<int64_t>(value));
+	}
+
+	template<std::integral T>
+		requires (!std::same_as<std::remove_cv_t<T>, bool>)
+	void write_hex(std::string_view key, T value) {
+		write_hex(key, static_cast<int64_t>(value));
+	}
+
+	template<std::floating_point T>
+	void write(std::string_view key, T value) {
+		write(key, static_cast<double>(value));
+	}
 
 	// Serialise to a stream or file. Returns false on error.
 	bool save(std::ostream &output) const;
