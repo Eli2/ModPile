@@ -59,6 +59,7 @@ class OpenAlEqualizer {
 	ALuint m_effect = 0;
 	ALuint m_silentFilter = 0;
 	bool m_available = false;
+	bool m_functionsLoaded = false;
 
 	LPALGENEFFECTS                 m_alGenEffects = nullptr;
 	LPALDELETEEFFECTS              m_alDeleteEffects = nullptr;
@@ -72,20 +73,30 @@ class OpenAlEqualizer {
 	LPALFILTERI                    m_alFilteri = nullptr;
 	LPALFILTERF                    m_alFilterf = nullptr;
 
-	void load_functions() {
-		if(m_alGenEffects) return;
+	template<typename Function>
+	bool load_function(Function &function, const char *name) {
+		function = reinterpret_cast<Function>(alGetProcAddress(name));
+		return function != nullptr;
+	}
 
-		m_alGenEffects    = (LPALGENEFFECTS)                alGetProcAddress("alGenEffects");
-		m_alDeleteEffects = (LPALDELETEEFFECTS)             alGetProcAddress("alDeleteEffects");
-		m_alEffecti       = (LPALEFFECTI)                   alGetProcAddress("alEffecti");
-		m_alEffectf       = (LPALEFFECTF)                   alGetProcAddress("alEffectf");
-		m_alGenAuxSlots   = (LPALGENAUXILIARYEFFECTSLOTS)   alGetProcAddress("alGenAuxiliaryEffectSlots");
-		m_alDelAuxSlots   = (LPALDELETEAUXILIARYEFFECTSLOTS)alGetProcAddress("alDeleteAuxiliaryEffectSlots");
-		m_alAuxSloti      = (LPALAUXILIARYEFFECTSLOTI)      alGetProcAddress("alAuxiliaryEffectSloti");
-		m_alGenFilters    = (LPALGENFILTERS)                alGetProcAddress("alGenFilters");
-		m_alDeleteFilters = (LPALDELETEFILTERS)             alGetProcAddress("alDeleteFilters");
-		m_alFilteri       = (LPALFILTERI)                   alGetProcAddress("alFilteri");
-		m_alFilterf       = (LPALFILTERF)                   alGetProcAddress("alFilterf");
+	bool load_functions() {
+		if(m_functionsLoaded)
+			return true;
+
+		bool ok = true;
+		ok &= load_function<LPALGENEFFECTS>(m_alGenEffects, "alGenEffects");
+		ok &= load_function<LPALDELETEEFFECTS>(m_alDeleteEffects, "alDeleteEffects");
+		ok &= load_function<LPALEFFECTI>(m_alEffecti, "alEffecti");
+		ok &= load_function<LPALEFFECTF>(m_alEffectf, "alEffectf");
+		ok &= load_function<LPALGENAUXILIARYEFFECTSLOTS>(m_alGenAuxSlots, "alGenAuxiliaryEffectSlots");
+		ok &= load_function<LPALDELETEAUXILIARYEFFECTSLOTS>(m_alDelAuxSlots, "alDeleteAuxiliaryEffectSlots");
+		ok &= load_function<LPALAUXILIARYEFFECTSLOTI>(m_alAuxSloti, "alAuxiliaryEffectSloti");
+		ok &= load_function<LPALGENFILTERS>(m_alGenFilters, "alGenFilters");
+		ok &= load_function<LPALDELETEFILTERS>(m_alDeleteFilters, "alDeleteFilters");
+		ok &= load_function<LPALFILTERI>(m_alFilteri, "alFilteri");
+		ok &= load_function<LPALFILTERF>(m_alFilterf, "alFilterf");
+		m_functionsLoaded = ok;
+		return ok;
 	}
 
 	void apply_gains(const AppState::Player::EqualizerSettings &settings) {
@@ -108,7 +119,10 @@ public:
 			return;
 		}
 
-		load_functions();
+		if(!load_functions()) {
+			log_error("Failed to load OpenAL EFX functions, equalizer disabled");
+			return;
+		}
 
 		m_alGenAuxSlots(1, &m_auxSlot);
 		m_alGenEffects(1, &m_effect);
