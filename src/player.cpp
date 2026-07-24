@@ -52,14 +52,13 @@ namespace {
 
 class OpenAlEqualizer {
 	std::atomic<AppState::Player::EqualizerSettings> &m_settings;
-	std::optional<AppState::Player::EqualizerSettings> m_previousSettings;
+	AppState::Player::EqualizerSettings m_previousSettings;
 
 	ALuint m_source = 0;
 	ALuint m_auxSlot = 0;
 	ALuint m_effect = 0;
 	ALuint m_silentFilter = 0;
 	bool m_available = false;
-	bool m_connected = false;
 
 	LPALGENEFFECTS                 m_alGenEffects = nullptr;
 	LPALDELETEEFFECTS              m_alDeleteEffects = nullptr;
@@ -89,7 +88,7 @@ class OpenAlEqualizer {
 		m_alFilterf       = (LPALFILTERF)                   alGetProcAddress("alFilterf");
 	}
 
-	void apply_settings(const AppState::Player::EqualizerSettings &settings) {
+	void apply_gains(const AppState::Player::EqualizerSettings &settings) {
 		m_alEffectf(m_effect, AL_EQUALIZER_LOW_GAIN,  settings.low);
 		m_alEffectf(m_effect, AL_EQUALIZER_MID1_GAIN, settings.mid1);
 		m_alEffectf(m_effect, AL_EQUALIZER_MID2_GAIN, settings.mid2);
@@ -116,7 +115,7 @@ public:
 		m_alEffecti(m_effect, AL_EFFECT_TYPE, AL_EFFECT_EQUALIZER);
 		
 		const auto settings = m_settings.load();
-		apply_settings(settings);
+		apply_gains(settings);
 		m_previousSettings = settings;
 
 		// Mute the direct path while the EQ send is active so the parallel EFX
@@ -126,8 +125,7 @@ public:
 		m_alFilterf(m_silentFilter, AL_LOWPASS_GAIN,   0.0f);
 		m_alFilterf(m_silentFilter, AL_LOWPASS_GAINHF, 0.0f);
 
-		m_connected = settings.enabled;
-		if(m_connected) {
+		if(settings.enabled) {
 			alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
 				static_cast<ALint>(m_auxSlot), 0, AL_FILTER_NULL);
 			alSourcei(m_source, AL_DIRECT_FILTER, static_cast<ALint>(m_silentFilter));
@@ -136,32 +134,26 @@ public:
 		AL_CHECK;
 	}
 
-	void begin_track() {
-		m_previousSettings.reset();
-	}
-
 	void update() {
 		if(!m_available)
 			return;
 
 		const auto settings = m_settings.load();
-		if(!m_previousSettings || settings != *m_previousSettings) {
-			apply_settings(settings);
-			m_previousSettings = settings;
-		}
+		if(settings != m_previousSettings) {
+			apply_gains(settings);
 
-		const bool shouldConnect = settings.enabled;
-		if(shouldConnect != m_connected) {
-			m_connected = shouldConnect;
-			const ALint slot = m_connected
-				? static_cast<ALint>(m_auxSlot)
-				: AL_EFFECTSLOT_NULL;
-			const ALint directFilter = m_connected
-				? static_cast<ALint>(m_silentFilter)
-				: AL_FILTER_NULL;
-			alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
-				slot, 0, AL_FILTER_NULL);
-			alSourcei(m_source, AL_DIRECT_FILTER, directFilter);
+			if(settings.enabled != m_previousSettings.enabled) {
+				const ALint slot = settings.enabled
+					? static_cast<ALint>(m_auxSlot)
+					: AL_EFFECTSLOT_NULL;
+				const ALint directFilter = settings.enabled
+					? static_cast<ALint>(m_silentFilter)
+					: AL_FILTER_NULL;
+				alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
+					slot, 0, AL_FILTER_NULL);
+				alSourcei(m_source, AL_DIRECT_FILTER, directFilter);
+			}
+			m_previousSettings = settings;
 		}
 		AL_CHECK;
 	}
@@ -177,9 +169,11 @@ public:
 		m_alDeleteEffects(1, &m_effect);
 		m_alDeleteFilters(1, &m_silentFilter);
 
+		m_source = 0;
+		m_auxSlot = 0;
+		m_effect = 0;
 		m_silentFilter = 0;
 		m_available = false;
-		m_connected = false;
 	}
 };
 
@@ -374,7 +368,6 @@ bool player_init(AppState &app) {
 			prev_gain         = -1.f;
 			prev_track_gain   = -1.f;
 			prev_stereo_width = -1.f;
-			equalizer.begin_track();
 			pd = PlayData();
 			prebuffering = true;
 			prebufferCount = 0;
