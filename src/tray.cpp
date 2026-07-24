@@ -142,13 +142,13 @@ void tray_init(AppState &app) {
 	auto playPause = SDL_InsertTrayEntryAt(menu, -1, "Play/Pause", SDL_TRAYENTRY_BUTTON);
 	SDL_SetTrayEntryCallback(playPause, [](void *userdata, SDL_TrayEntry *invoker) {
 		auto &app = *static_cast<AppState*>(userdata);
-		app.player.request.playToggle = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Toggle);
 	}, &app);
 	
 	auto next = SDL_InsertTrayEntryAt(menu, -1, "Next", SDL_TRAYENTRY_BUTTON);
 	SDL_SetTrayEntryCallback(next, [](void *userdata, SDL_TrayEntry *invoker) {
 		auto &app = *static_cast<AppState*>(userdata);
-		app.player.request.next = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Next);
 	}, &app);
 }
 

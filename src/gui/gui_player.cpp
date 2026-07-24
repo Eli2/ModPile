@@ -51,23 +51,23 @@ void gui_player(AppState &app) {
 	}
 
 	if(ImGui::Button("Prev")) {
-		app.player.request.prev = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Previous);
 	}
 	ImGui::SameLine();
 	if(ImGui::Button("Play")) {
-		app.player.request.play = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Play);
 	}
 	ImGui::SameLine();
 	if(ImGui::Button("Pause")) {
-		app.player.request.pause = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Pause);
 	}
 	ImGui::SameLine();
 	if(ImGui::Button("Stop")) {
-		app.player.request.stop = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Stop);
 	}
 	ImGui::SameLine();
 	if(ImGui::Button("Next")) {
-		app.player.request.next = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Next);
 	}
 	ImGui::Separator();
 

@@ -108,12 +108,11 @@ void gui_playlist(AppState &app) {
 				ImGui::BeginDisabled(!hasRows);
 				if(ImGui::Button("Play from start")) {
 					auto &first = app.playlist.state.rows[0];
-					app.player.request.playId.set(first.id);
-					app.player.request.playlistTrackId = first.playlist_track_id;
-					app.player.request.playlistId = first.playlist_id;
-					app.player.request.charts_mode = false;
-					app.player.request.play = true;
-					app.player.request.next = true;
+					app.player.request.commands.push(AppState::Player::Request::PlayTrack{
+						.id = first.id,
+						.playlist_track_id = first.playlist_track_id,
+						.playlist_id = first.playlist_id
+					});
 				}
 				ImGui::EndDisabled();
 				ImGui::EndTabItem();
@@ -178,12 +177,11 @@ void gui_playlist(AppState &app) {
 			auto uniqeId = std::format("{}{}", r.playlist_track_id, r.id);
 			ImGui::PushID(uniqeId.c_str());
 			if(ImGui::Button("play")) {
-				app.player.request.playId.set(r.id);
-				app.player.request.playlistTrackId = r.playlist_track_id;
-				app.player.request.playlistId = r.playlist_id;
-				app.player.request.charts_mode = false;
-				app.player.request.play = true;
-				app.player.request.next = true;
+				app.player.request.commands.push(AppState::Player::Request::PlayTrack{
+					.id = r.id,
+					.playlist_track_id = r.playlist_track_id,
+					.playlist_id = r.playlist_id
+				});
 			};
 			ImGui::PopID();
 

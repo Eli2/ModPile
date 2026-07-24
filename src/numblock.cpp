@@ -164,13 +164,16 @@ void numblock_init(AppState &app) {
 							switch(scancode) {
 							case 42: // Backspace
 								app.player.request.trash = true;
-								app.player.request.next = true;
+								app.player.request.commands.push(
+									AppState::Player::Request::Command::Next);
 								break;
 							case 83: // enter
-								app.player.request.playToggle = true;
+								app.player.request.commands.push(
+									AppState::Player::Request::Command::Toggle);
 								break;
 							case 88: // enter
-								app.player.request.next = true;
+								app.player.request.commands.push(
+									AppState::Player::Request::Command::Next);
 								break;
 							case 89: // 1
 								rate(1);

@@ -243,7 +243,7 @@ static int Next(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.next = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Next);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {
@@ -261,7 +261,7 @@ static int Previous(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.prev = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Previous);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {
@@ -279,7 +279,7 @@ static int Pause(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.pause = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Pause);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {
@@ -297,7 +297,7 @@ static int PlayPause(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.playToggle = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Toggle);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {
@@ -315,7 +315,7 @@ static int Stop(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.stop = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Stop);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {
@@ -333,7 +333,7 @@ static int Play(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	app.player.request.play = true;
+	app.player.request.commands.push(AppState::Player::Request::Command::Play);
 	
 	r = sd_bus_reply_method_return(m, "");
 	if(r < 0) {

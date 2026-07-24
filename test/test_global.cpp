@@ -42,11 +42,12 @@ TEST_CASE("resetting database state drops stale rows navigation and requests", "
 	app.charts.nav.active = true;
 	app.charts.nav.track_ids.emplace_back("old-track");
 
-	app.player.request.play = true;
-	app.player.request.playId.set("old-track");
-	app.player.request.playlistTrackId = 11;
-	app.player.request.playlistId = 7;
-	app.player.request.charts_mode = true;
+	app.player.request.commands.push(AppState::Player::Request::PlayTrack{
+		.id = "old-track",
+		.playlist_track_id = 11,
+		.playlist_id = 7,
+		.charts_mode = true
+	});
 	app.player.state.current_playlist_track_id = 11;
 	app.player.state.current_playing_playlist_id = 7;
 	app.player.state.in_charts_mode = true;
@@ -73,11 +74,7 @@ TEST_CASE("resetting database state drops stale rows navigation and requests", "
 	CHECK_FALSE(app.charts.nav.active);
 	CHECK(app.charts.nav.track_ids.empty());
 
-	CHECK_FALSE(app.player.request.play.load());
-	CHECK(app.player.request.playId.get().empty());
-	CHECK(app.player.request.playlistTrackId.load() == 0);
-	CHECK(app.player.request.playlistId.load() == 0);
-	CHECK_FALSE(app.player.request.charts_mode.load());
+	CHECK_FALSE(app.player.request.commands.try_pop().has_value());
 	CHECK(app.player.state.current_playlist_track_id.load() == 0);
 	CHECK(app.player.state.current_playing_playlist_id.load() == 0);
 	CHECK_FALSE(app.player.state.in_charts_mode.load());

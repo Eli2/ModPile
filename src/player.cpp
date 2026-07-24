@@ -349,21 +349,27 @@ bool player_init(AppState &app) {
 			alDevice = nullptr;
 		};
 		
+		using Command = AppState::Player::Request::Command;
+		using PlayTrack = AppState::Player::Request::PlayTrack;
+		std::optional<PlayTrack> requestedTrack;
 		
 		auto stopped = [&]()->auto {
-			
-			if(app.player.request.play) {
-				app.player.request.play = false;
-				return State::PlayStart;
-			}
-			
-			if(app.player.request.pause) {
-				app.player.request.pause = false;
-			}
-			
-			if(app.player.request.playToggle) {
-				app.player.request.playToggle = false;
-				return State::PlayStart;
+			if(auto request = app.player.request.commands.try_pop()) {
+				if(auto *track = std::get_if<PlayTrack>(&*request)) {
+					requestedTrack = std::move(*track);
+					return State::PlayStart;
+				}
+
+				switch(std::get<Command>(*request)) {
+				case Command::Play:
+				case Command::Toggle:
+					return State::PlayStart;
+				case Command::Previous:
+				case Command::Pause:
+				case Command::Stop:
+				case Command::Next:
+					break;
+				}
 			}
 			
 			if(g_quitRequest) {
@@ -406,18 +412,16 @@ bool player_init(AppState &app) {
 			app.player.request.rating = -1;
 			app.player.track.rating = -1;
 			app.player.request.trash = false;
-			
-			
-			app.player.request.next = false;
 
-			auto requestedId = app.player.request.playId.get();
-			app.player.request.playId.set("");
-
-			auto requestedPlaylistTrackId = app.player.request.playlistTrackId.exchange(0);
-			if(requestedPlaylistTrackId != 0) {
-				app.player.state.current_playlist_track_id = requestedPlaylistTrackId;
-				app.player.state.in_charts_mode = app.player.request.charts_mode.exchange(false);
-				app.player.state.current_playing_playlist_id = app.player.request.playlistId.exchange(0);
+			std::string requestedId;
+			if(requestedTrack) {
+				requestedId = std::move(requestedTrack->id);
+				if(requestedTrack->playlist_track_id != 0) {
+					app.player.state.current_playlist_track_id = requestedTrack->playlist_track_id;
+					app.player.state.in_charts_mode = requestedTrack->charts_mode;
+					app.player.state.current_playing_playlist_id = requestedTrack->playlist_id;
+				}
+				requestedTrack.reset();
 			}
 
 			FileRow file;
@@ -613,49 +617,31 @@ bool player_init(AppState &app) {
 		};
 		
 		auto play = [&]()->auto{
-			
-			if(!app.player.request.playId.get().empty()) {
-				app.player.request.play = false;
-				nextWasRequested = true;
-				return State::PlayEnd;
-			}
+			if(auto request = app.player.request.commands.try_pop()) {
+				if(auto *track = std::get_if<PlayTrack>(&*request)) {
+					requestedTrack = std::move(*track);
+					nextWasRequested = true;
+					return State::PlayEnd;
+				}
 
-			if(app.player.request.play) {
-				app.player.request.play = false;
-				// We are already Playing
-			}
-			
-			if(app.player.request.pause) {
-				app.player.request.pause = false;
-				alSourcePause(alSource);
-				AL_CHECK;
-				return State::Pause;
-			}
-			
-			if(app.player.request.playToggle) {
-				app.player.request.playToggle = false;
-				alSourcePause(alSource);
-				AL_CHECK;
-				return State::Pause;
-			}
-			
-			if(app.player.request.stop) {
-				app.player.request.stop = false;
-				stopAfterPlayEnd = true;
-				return State::PlayEnd;
-			}
-			
-			
-			if(app.player.request.next) {
-				app.player.request.next = false;
-				nextWasRequested = true;
-				return State::PlayEnd;
-			}
-
-			if(app.player.request.prev) {
-				app.player.request.prev = false;
-				prevWasRequested = true;
-				return State::PlayEnd;
+				switch(std::get<Command>(*request)) {
+				case Command::Play:
+					break;
+				case Command::Pause:
+				case Command::Toggle:
+					alSourcePause(alSource);
+					AL_CHECK;
+					return State::Pause;
+				case Command::Stop:
+					stopAfterPlayEnd = true;
+					return State::PlayEnd;
+				case Command::Next:
+					nextWasRequested = true;
+					return State::PlayEnd;
+				case Command::Previous:
+					prevWasRequested = true;
+					return State::PlayEnd;
+				}
 			}
 			
 			if(g_quitRequest) {
@@ -920,47 +906,30 @@ bool player_init(AppState &app) {
 		};
 		
 		auto pause = [&]()->auto{
-			
-			if(!app.player.request.playId.get().empty()) {
-				app.player.request.play = false;
-				return State::PlayEnd;
-			}
+			if(auto request = app.player.request.commands.try_pop()) {
+				if(auto *track = std::get_if<PlayTrack>(&*request)) {
+					requestedTrack = std::move(*track);
+					return State::PlayEnd;
+				}
 
-			if(app.player.request.play) {
-				app.player.request.play = false;
-				alSourcePlay(alSource);
-				AL_CHECK;
-				return State::Play;
-			}
-			
-			if(app.player.request.pause) {
-				app.player.request.pause = false;
-				// We are already Paused
-			}
-			
-			if(app.player.request.playToggle) {
-				app.player.request.playToggle = false;
-				alSourcePlay(alSource);
-				AL_CHECK;
-				return State::Play;
-			}
-
-			if(app.player.request.stop) {
-				app.player.request.stop = false;
-				stopAfterPlayEnd = true;
-				return State::PlayEnd;
-			}
-
-			if(app.player.request.next) {
-				app.player.request.next = false;
-				nextWasRequested = true;
-				return State::PlayEnd;
-			}
-
-			if(app.player.request.prev) {
-				app.player.request.prev = false;
-				prevWasRequested = true;
-				return State::PlayEnd;
+				switch(std::get<Command>(*request)) {
+				case Command::Play:
+				case Command::Toggle:
+					alSourcePlay(alSource);
+					AL_CHECK;
+					return State::Play;
+				case Command::Pause:
+					break;
+				case Command::Stop:
+					stopAfterPlayEnd = true;
+					return State::PlayEnd;
+				case Command::Next:
+					nextWasRequested = true;
+					return State::PlayEnd;
+				case Command::Previous:
+					prevWasRequested = true;
+					return State::PlayEnd;
+				}
 			}
 
 			if(g_quitRequest) {

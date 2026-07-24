@@ -9,9 +9,11 @@
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "util/ring_buffer.h"
+#include "util/thread_safe_queue.h"
 
 using Guard = std::lock_guard<std::mutex>;
 
@@ -93,23 +95,29 @@ struct AppState {
 	} request;
 	struct Player {
 		struct Request {
-			std::atomic_bool prev = false;
-			std::atomic_bool play = false;
-			std::atomic_bool pause = false;
-			std::atomic_bool playToggle = false;
-			std::atomic_bool stop = false;
-			std::atomic_bool next = false;
+			enum class Command {
+				Previous,
+				Play,
+				Pause,
+				Toggle,
+				Stop,
+				Next
+			};
+			struct PlayTrack {
+				std::string id;
+				int64_t playlist_track_id = 0;
+				int64_t playlist_id = 0;
+				bool charts_mode = false;
+			};
+			using TransportCommand = std::variant<Command, PlayTrack>;
+
+			ThreadSafeQueue<TransportCommand> commands;
 			
 			std::atomic_long rating = -1;
 			std::atomic_bool trash = false;
 			
 			std::atomic<int64_t> seek     = std::numeric_limits<int64_t>::min();
 			std::atomic<int64_t> position = std::numeric_limits<int64_t>::min();
-			
-			LockedString playId;
-			std::atomic<int64_t> playlistTrackId = 0;
-			std::atomic<int64_t> playlistId = 0;
-			std::atomic<bool>    charts_mode = false;
 		} request;
 		struct State {
 			enum class Playback {

@@ -26,11 +26,11 @@ void gui_charts(AppState &app) {
 			ImGui::BeginDisabled(!hasRows);
 			if(ImGui::Button("Play from start")) {
 				auto &first = app.charts.state.rows[0];
-				app.player.request.playId.set(first.id);
-				app.player.request.playlistTrackId = 1;
-				app.player.request.charts_mode = true;
-				app.player.request.play = true;
-				app.player.request.next = true;
+				app.player.request.commands.push(AppState::Player::Request::PlayTrack{
+					.id = first.id,
+					.playlist_track_id = 1,
+					.charts_mode = true
+				});
 			}
 			ImGui::EndDisabled();
 			ImGui::EndTabItem();
@@ -90,11 +90,11 @@ void gui_charts(AppState &app) {
 			ImGui::TableNextColumn();
 			ImGui::PushID(static_cast<int>(idx));
 			if(ImGui::Button("play")) {
-				app.player.request.playId.set(r.id);
-				app.player.request.playlistTrackId = static_cast<int64_t>(idx + 1);
-				app.player.request.charts_mode = true;
-				app.player.request.play = true;
-				app.player.request.next = true;
+				app.player.request.commands.push(AppState::Player::Request::PlayTrack{
+					.id = r.id,
+					.playlist_track_id = static_cast<int64_t>(idx + 1),
+					.charts_mode = true
+				});
 			}
 			ImGui::PopID();
 

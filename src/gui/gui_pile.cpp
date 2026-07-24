@@ -138,9 +138,8 @@ void gui_pile(AppState &app) {
 			ImGui::TableNextColumn();
 			ImGui::PushID(r.id.c_str());
 			if(ImGui::Button("play")) {
-				app.player.request.playId.set(r.id);
-				app.player.request.play = true;
-				app.player.request.next = true;
+				app.player.request.commands.push(
+					AppState::Player::Request::PlayTrack{.id = r.id});
 			};
 
 			ImGui::TableNextColumn();

@@ -199,7 +199,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 		}
 	}
 
-	//app.player.request.play = true;
 
 	return SDL_APP_CONTINUE;
 }
