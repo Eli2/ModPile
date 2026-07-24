@@ -48,6 +48,160 @@ do { \
 	} \
 } while(0)
 
+namespace {
+
+class OpenAlEqualizer {
+public:
+	explicit OpenAlEqualizer(AppState::Player::State &settings)
+		: settings_(settings)
+	{}
+
+	void open(ALCdevice *device, ALuint source) {
+		source_ = source;
+		if(!alcIsExtensionPresent(device, "ALC_EXT_EFX")) {
+			log_info("ALC_EXT_EFX not available, equalizer disabled");
+			return;
+		}
+
+		load_functions();
+
+		alGenAuxSlots_(1, &auxSlot_);
+		alGenEffects_(1, &effect_);
+		alEffecti_(effect_, AL_EFFECT_TYPE, AL_EFFECT_EQUALIZER);
+		previousLow_  = settings_.eq_low.load();
+		previousMid1_ = settings_.eq_mid1.load();
+		previousMid2_ = settings_.eq_mid2.load();
+		previousHigh_ = settings_.eq_high.load();
+		alEffectf_(effect_, AL_EQUALIZER_LOW_GAIN,  previousLow_);
+		alEffectf_(effect_, AL_EQUALIZER_MID1_GAIN, previousMid1_);
+		alEffectf_(effect_, AL_EQUALIZER_MID2_GAIN, previousMid2_);
+		alEffectf_(effect_, AL_EQUALIZER_HIGH_GAIN, previousHigh_);
+		alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
+
+		// Mute the direct path while the EQ send is active so the parallel EFX
+		// path does not double the volume.
+		alGenFilters_(1, &silentFilter_);
+		alFilteri_(silentFilter_, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
+		alFilterf_(silentFilter_, AL_LOWPASS_GAIN,   0.0f);
+		alFilterf_(silentFilter_, AL_LOWPASS_GAINHF, 0.0f);
+
+		connected_ = settings_.eq_enabled.load();
+		if(connected_) {
+			alSource3i(source_, AL_AUXILIARY_SEND_FILTER,
+				static_cast<ALint>(auxSlot_), 0, AL_FILTER_NULL);
+			alSourcei(source_, AL_DIRECT_FILTER, static_cast<ALint>(silentFilter_));
+		}
+		available_ = true;
+		AL_CHECK;
+	}
+
+	void begin_track() {
+		previousLow_ = previousMid1_ = previousMid2_ = previousHigh_ = -1.f;
+	}
+
+	void update() {
+		if(!available_) return;
+
+		bool changed = false;
+		update_band(settings_.eq_low, previousLow_, AL_EQUALIZER_LOW_GAIN, changed);
+		update_band(settings_.eq_mid1, previousMid1_, AL_EQUALIZER_MID1_GAIN, changed);
+		update_band(settings_.eq_mid2, previousMid2_, AL_EQUALIZER_MID2_GAIN, changed);
+		update_band(settings_.eq_high, previousHigh_, AL_EQUALIZER_HIGH_GAIN, changed);
+		if(changed) {
+			alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
+		}
+
+		const bool shouldConnect = settings_.eq_enabled.load();
+		if(shouldConnect != connected_) {
+			connected_ = shouldConnect;
+			const ALint slot = connected_
+				? static_cast<ALint>(auxSlot_)
+				: AL_EFFECTSLOT_NULL;
+			const ALint directFilter = connected_
+				? static_cast<ALint>(silentFilter_)
+				: AL_FILTER_NULL;
+			alSource3i(source_, AL_AUXILIARY_SEND_FILTER,
+				slot, 0, AL_FILTER_NULL);
+			alSourcei(source_, AL_DIRECT_FILTER, directFilter);
+		}
+		AL_CHECK;
+	}
+
+	void close() {
+		if(!available_) return;
+
+		alSourcei(source_, AL_DIRECT_FILTER, AL_FILTER_NULL);
+		alSource3i(source_, AL_AUXILIARY_SEND_FILTER,
+			AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
+		alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
+		alDelAuxSlots_(1, &auxSlot_);
+		alDeleteEffects_(1, &effect_);
+		alDeleteFilters_(1, &silentFilter_);
+
+		silentFilter_ = 0;
+		available_ = false;
+		connected_ = false;
+	}
+
+private:
+	void load_functions() {
+		if(alGenEffects_) return;
+
+		alGenEffects_    = (LPALGENEFFECTS)               alGetProcAddress("alGenEffects");
+		alDeleteEffects_ = (LPALDELETEEFFECTS)            alGetProcAddress("alDeleteEffects");
+		alEffecti_       = (LPALEFFECTI)                  alGetProcAddress("alEffecti");
+		alEffectf_       = (LPALEFFECTF)                  alGetProcAddress("alEffectf");
+		alGenAuxSlots_   = (LPALGENAUXILIARYEFFECTSLOTS)  alGetProcAddress("alGenAuxiliaryEffectSlots");
+		alDelAuxSlots_   = (LPALDELETEAUXILIARYEFFECTSLOTS)alGetProcAddress("alDeleteAuxiliaryEffectSlots");
+		alAuxSloti_      = (LPALAUXILIARYEFFECTSLOTI)     alGetProcAddress("alAuxiliaryEffectSloti");
+		alGenFilters_    = (LPALGENFILTERS)               alGetProcAddress("alGenFilters");
+		alDeleteFilters_ = (LPALDELETEFILTERS)            alGetProcAddress("alDeleteFilters");
+		alFilteri_       = (LPALFILTERI)                  alGetProcAddress("alFilteri");
+		alFilterf_       = (LPALFILTERF)                  alGetProcAddress("alFilterf");
+	}
+
+	void update_band(
+		std::atomic<float> &setting,
+		float &previous,
+		ALenum parameter,
+		bool &changed)
+	{
+		const float value = setting.load();
+		if(value == previous) return;
+
+		previous = value;
+		alEffectf_(effect_, parameter, value);
+		changed = true;
+	}
+
+	ALuint source_ = 0;
+	ALuint auxSlot_ = 0;
+	ALuint effect_ = 0;
+	ALuint silentFilter_ = 0;
+	bool available_ = false;
+	bool connected_ = false;
+
+	AppState::Player::State &settings_;
+	float previousLow_ = -1.f;
+	float previousMid1_ = -1.f;
+	float previousMid2_ = -1.f;
+	float previousHigh_ = -1.f;
+
+	LPALGENEFFECTS alGenEffects_ = nullptr;
+	LPALDELETEEFFECTS alDeleteEffects_ = nullptr;
+	LPALEFFECTI alEffecti_ = nullptr;
+	LPALEFFECTF alEffectf_ = nullptr;
+	LPALGENAUXILIARYEFFECTSLOTS alGenAuxSlots_ = nullptr;
+	LPALDELETEAUXILIARYEFFECTSLOTS alDelAuxSlots_ = nullptr;
+	LPALAUXILIARYEFFECTSLOTI alAuxSloti_ = nullptr;
+	LPALGENFILTERS alGenFilters_ = nullptr;
+	LPALDELETEFILTERS alDeleteFilters_ = nullptr;
+	LPALFILTERI alFilteri_ = nullptr;
+	LPALFILTERF alFilterf_ = nullptr;
+};
+
+} // namespace
+
 
 enum class State {
 	Stopped,
@@ -98,24 +252,7 @@ bool player_init(AppState &app) {
 		ALCcontext           *alContext = nullptr;
 		ALuint                alSource  = 0;
 		std::array<ALuint, 6> alBuffers = {};
-
-		ALuint alAuxSlot     = 0;
-		ALuint alEffect      = 0;
-		ALuint alSilentFilter = 0; // lowpass gain=0 — mutes direct path when EQ is active
-		bool   alEfxAvail    = false;
-		bool   alEqConnected = false;
-
-		LPALGENEFFECTS             alGenEffects_    = nullptr;
-		LPALDELETEEFFECTS          alDeleteEffects_ = nullptr;
-		LPALEFFECTI                alEffecti_       = nullptr;
-		LPALEFFECTF                alEffectf_       = nullptr;
-		LPALGENAUXILIARYEFFECTSLOTS  alGenAuxSlots_  = nullptr;
-		LPALDELETEAUXILIARYEFFECTSLOTS alDelAuxSlots_ = nullptr;
-		LPALAUXILIARYEFFECTSLOTI   alAuxSloti_      = nullptr;
-		LPALGENFILTERS             alGenFilters_    = nullptr;
-		LPALDELETEFILTERS          alDeleteFilters_ = nullptr;
-		LPALFILTERI                alFilteri_       = nullptr;
-		LPALFILTERF                alFilterf_       = nullptr;
+		OpenAlEqualizer equalizer(app.player.state);
 		
 		auto openDev = [&]()->auto {
 			alDevice = alcOpenDevice(NULL);
@@ -161,44 +298,7 @@ bool player_init(AppState &app) {
 			alSourcef(alSource, AL_MAX_GAIN, 4.f);
 			AL_CHECK;
 
-			if(alcIsExtensionPresent(alDevice, "ALC_EXT_EFX")) {
-				if(!alGenEffects_) {
-					alGenEffects_    = (LPALGENEFFECTS)               alGetProcAddress("alGenEffects");
-					alDeleteEffects_ = (LPALDELETEEFFECTS)            alGetProcAddress("alDeleteEffects");
-					alEffecti_       = (LPALEFFECTI)                  alGetProcAddress("alEffecti");
-					alEffectf_       = (LPALEFFECTF)                  alGetProcAddress("alEffectf");
-					alGenAuxSlots_   = (LPALGENAUXILIARYEFFECTSLOTS)  alGetProcAddress("alGenAuxiliaryEffectSlots");
-					alDelAuxSlots_   = (LPALDELETEAUXILIARYEFFECTSLOTS)alGetProcAddress("alDeleteAuxiliaryEffectSlots");
-					alAuxSloti_      = (LPALAUXILIARYEFFECTSLOTI)     alGetProcAddress("alAuxiliaryEffectSloti");
-					alGenFilters_    = (LPALGENFILTERS)               alGetProcAddress("alGenFilters");
-					alDeleteFilters_ = (LPALDELETEFILTERS)            alGetProcAddress("alDeleteFilters");
-					alFilteri_       = (LPALFILTERI)                  alGetProcAddress("alFilteri");
-					alFilterf_       = (LPALFILTERF)                  alGetProcAddress("alFilterf");
-				}
-				alGenAuxSlots_(1, &alAuxSlot);
-				alGenEffects_(1, &alEffect);
-				alEffecti_(alEffect, AL_EFFECT_TYPE, AL_EFFECT_EQUALIZER);
-				alEffectf_(alEffect, AL_EQUALIZER_LOW_GAIN,  app.player.state.eq_low.load());
-				alEffectf_(alEffect, AL_EQUALIZER_MID1_GAIN, app.player.state.eq_mid1.load());
-				alEffectf_(alEffect, AL_EQUALIZER_MID2_GAIN, app.player.state.eq_mid2.load());
-				alEffectf_(alEffect, AL_EQUALIZER_HIGH_GAIN, app.player.state.eq_high.load());
-				alAuxSloti_(alAuxSlot, AL_EFFECTSLOT_EFFECT, (ALint)alEffect);
-				// Silent filter: mutes the direct path when EQ send is active,
-				// preventing the parallel EFX path from doubling the volume.
-				alGenFilters_(1, &alSilentFilter);
-				alFilteri_(alSilentFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
-				alFilterf_(alSilentFilter, AL_LOWPASS_GAIN,   0.0f);
-				alFilterf_(alSilentFilter, AL_LOWPASS_GAINHF, 0.0f);
-				alEqConnected = app.player.state.eq_enabled.load();
-				if(alEqConnected) {
-					alSource3i(alSource, AL_AUXILIARY_SEND_FILTER, (ALint)alAuxSlot, 0, AL_FILTER_NULL);
-					alSourcei(alSource, AL_DIRECT_FILTER, (ALint)alSilentFilter);
-				}
-				alEfxAvail = true;
-				AL_CHECK;
-			} else {
-				log_info("ALC_EXT_EFX not available, equalizer disabled");
-			}
+			equalizer.open(alDevice, alSource);
 
 #ifdef XMP_FORMAT_32BIT
 			{
@@ -224,18 +324,8 @@ bool player_init(AppState &app) {
 		auto closeDev = [&]()->auto {
 			if(!alDevice) return;
 
-			if(alContext && alEfxAvail) {
-				alSourcei(alSource, AL_DIRECT_FILTER, AL_FILTER_NULL);
-				alSource3i(alSource, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
-				alAuxSloti_(alAuxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
-				alDelAuxSlots_(1, &alAuxSlot);
-				alDeleteEffects_(1, &alEffect);
-				alDeleteFilters_(1, &alSilentFilter);
-				alSilentFilter = 0;
-				alEfxAvail     = false;
-				alEqConnected  = false;
-			}
 			if(alContext) {
+				equalizer.close();
 				alDeleteSources(1, &alSource);
 				AL_CHECK;
 				alDeleteBuffers(alBuffers.size(), alBuffers.data());
@@ -286,10 +376,6 @@ bool player_init(AppState &app) {
 		float prev_gain          = -1.f;
 		float prev_track_gain    = -1.f;
 		float prev_stereo_width  = -1.f;
-		float prev_eq_low        = -1.f;
-		float prev_eq_mid1       = -1.f;
-		float prev_eq_mid2       = -1.f;
-		float prev_eq_high       = -1.f;
 		PlayData pd;
 		bool prebuffering = true;
 		size_t prebufferCount = 0;
@@ -305,10 +391,7 @@ bool player_init(AppState &app) {
 			prev_gain         = -1.f;
 			prev_track_gain   = -1.f;
 			prev_stereo_width = -1.f;
-			prev_eq_low       = -1.f;
-			prev_eq_mid1      = -1.f;
-			prev_eq_mid2      = -1.f;
-			prev_eq_high      = -1.f;
+			equalizer.begin_track();
 			pd = PlayData();
 			prebuffering = true;
 			prebufferCount = 0;
@@ -657,29 +740,7 @@ bool player_init(AppState &app) {
 				}
 			}
 
-			if(alEfxAvail) {
-				bool eqChanged = false;
-				auto checkEq = [&](std::atomic<float> &a, float &prev, ALenum param) {
-					float v = a.load();
-					if(v != prev) { prev = v; alEffectf_(alEffect, param, v); eqChanged = true; }
-				};
-				checkEq(app.player.state.eq_low,  prev_eq_low,  AL_EQUALIZER_LOW_GAIN);
-				checkEq(app.player.state.eq_mid1, prev_eq_mid1, AL_EQUALIZER_MID1_GAIN);
-				checkEq(app.player.state.eq_mid2, prev_eq_mid2, AL_EQUALIZER_MID2_GAIN);
-				checkEq(app.player.state.eq_high, prev_eq_high, AL_EQUALIZER_HIGH_GAIN);
-				if(eqChanged) {
-					alAuxSloti_(alAuxSlot, AL_EFFECTSLOT_EFFECT, (ALint)alEffect);
-				}
-				bool wantConnected = app.player.state.eq_enabled.load();
-				if(wantConnected != alEqConnected) {
-					alEqConnected = wantConnected;
-					ALint slot         = wantConnected ? (ALint)alAuxSlot      : AL_EFFECTSLOT_NULL;
-					ALint directFilter = wantConnected ? (ALint)alSilentFilter : AL_FILTER_NULL;
-					alSource3i(alSource, AL_AUXILIARY_SEND_FILTER, slot, 0, AL_FILTER_NULL);
-					alSourcei(alSource, AL_DIRECT_FILTER, directFilter);
-				}
-				AL_CHECK;
-			}
+			equalizer.update();
 			
 			pd.duration = fi.time;
 
