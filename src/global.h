@@ -135,7 +135,7 @@ struct AppState {
 			LockedString     name;
 			std::atomic<int>   length;
 			std::atomic<int>   elapsed;
-			std::atomic<float> gain = 1.0f;
+			std::atomic<float> gain_db = 0.0f;
 			std::atomic_long   rating = -1;
 		} track;
 	} player;

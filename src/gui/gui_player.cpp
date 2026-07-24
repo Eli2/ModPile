@@ -9,6 +9,8 @@
 #include "visualizer.h"
 #include "global.h"
 
+#include <cmath>
+
 void gui_player(AppState &app) {
 	ImGui::Begin(
 		"Player",
@@ -146,9 +148,12 @@ void gui_player(AppState &app) {
 	}
 	ImGui::Separator();
 	{
-		float gain = app.player.track.gain.load();
-		if(ImGui::SliderFloat("Track Gain", &gain, 0.0f, 4.0f)) {
-			app.player.track.gain.store(gain);
+		constexpr float minGainDb = -60.0f;
+		constexpr float maxGainDb = 20.0f * std::log10(4.0f);
+
+		float gainDb = app.player.track.gain_db.load();
+		if(ImGui::SliderFloat("Track Gain", &gainDb, minGainDb, maxGainDb, "%+.1f dB")) {
+			app.player.track.gain_db.store(gainDb);
 		}
 	}
 	ImGui::Separator();

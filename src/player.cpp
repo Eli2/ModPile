@@ -379,7 +379,7 @@ bool player_init(AppState &app) {
 		bool prevWasRequested = false;
 		bool stopAfterPlayEnd = false;
 		float prev_gain          = -1.f;
-		float prev_track_gain    = -1.f;
+		float prev_track_gain_db = std::numeric_limits<float>::quiet_NaN();
 		float prev_stereo_width  = -1.f;
 		PlayData pd;
 		bool prebuffering = true;
@@ -394,7 +394,7 @@ bool player_init(AppState &app) {
 			prevWasRequested = false;
 			stopAfterPlayEnd = false;
 			prev_gain         = -1.f;
-			prev_track_gain   = -1.f;
+			prev_track_gain_db = std::numeric_limits<float>::quiet_NaN();
 			prev_stereo_width = -1.f;
 			pd = PlayData();
 			prebuffering = true;
@@ -600,15 +600,14 @@ bool player_init(AppState &app) {
 			app.mpris.request.metadata_changed = true;
 			
 			
-			double trackAlGain =1.0;
+			double trackGainDb = 0.0;
 			if(loudness.has_value()) {
 				auto l = loudness.value();
 				auto lDelta = app.config.player.target_loudness - l;
-				auto alGain = pow(10.0, lDelta / 20.0);
-				log_debug("Loudness Delta: {} AL_GAIN: {}", lDelta, alGain);
-				trackAlGain = alGain;
+				log_debug("Loudness Delta: {} dB", lDelta);
+				trackGainDb = lDelta;
 			}
-			app.player.track.gain.store(static_cast<float>(trackAlGain));
+			app.player.track.gain_db.store(static_cast<float>(trackGainDb));
 			
 			return State::Play;
 		};
@@ -729,10 +728,10 @@ bool player_init(AppState &app) {
 			}
 			
 			{
-				float tg = app.player.track.gain.load();
-				if(tg != prev_track_gain) {
-					prev_track_gain = tg;
-					alSourcef(alSource, AL_GAIN, tg);
+				float gainDb = app.player.track.gain_db.load();
+				if(gainDb != prev_track_gain_db) {
+					prev_track_gain_db = gainDb;
+					alSourcef(alSource, AL_GAIN, std::pow(10.0f, gainDb / 20.0f));
 				}
 			}
 			{
@@ -787,7 +786,6 @@ bool player_init(AppState &app) {
 					ALint val;
 					alGetSourcei(alSource, AL_SOURCE_STATE, &val);
 					if (val != AL_PLAYING) {
-						//alSourcef(g_alSource, AL_GAIN, trackAlGain);
 						alSourcePlay(alSource);
 					}
 				}
