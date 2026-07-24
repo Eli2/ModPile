@@ -80,6 +80,8 @@ struct AppState {
 			float mid1 = 1.0f;
 			float mid2 = 1.0f;
 			float high = 1.0f;
+
+			bool operator==(const EqualizerSettings &) const = default;
 		};
 		static_assert(std::is_trivially_copyable_v<EqualizerSettings>);
 

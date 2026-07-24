@@ -69,15 +69,8 @@ public:
 		alGenEffects_(1, &effect_);
 		alEffecti_(effect_, AL_EFFECT_TYPE, AL_EFFECT_EQUALIZER);
 		const auto settings = settings_.load();
-		previousLow_  = settings.low;
-		previousMid1_ = settings.mid1;
-		previousMid2_ = settings.mid2;
-		previousHigh_ = settings.high;
-		alEffectf_(effect_, AL_EQUALIZER_LOW_GAIN,  previousLow_);
-		alEffectf_(effect_, AL_EQUALIZER_MID1_GAIN, previousMid1_);
-		alEffectf_(effect_, AL_EQUALIZER_MID2_GAIN, previousMid2_);
-		alEffectf_(effect_, AL_EQUALIZER_HIGH_GAIN, previousHigh_);
-		alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
+		apply_settings(settings);
+		previousSettings_ = settings;
 
 		// Mute the direct path while the EQ send is active so the parallel EFX
 		// path does not double the volume.
@@ -97,20 +90,16 @@ public:
 	}
 
 	void begin_track() {
-		previousLow_ = previousMid1_ = previousMid2_ = previousHigh_ = -1.f;
+		previousSettings_.reset();
 	}
 
 	void update() {
 		if(!available_) return;
 
 		const auto settings = settings_.load();
-		bool changed = false;
-		update_band(settings.low, previousLow_, AL_EQUALIZER_LOW_GAIN, changed);
-		update_band(settings.mid1, previousMid1_, AL_EQUALIZER_MID1_GAIN, changed);
-		update_band(settings.mid2, previousMid2_, AL_EQUALIZER_MID2_GAIN, changed);
-		update_band(settings.high, previousHigh_, AL_EQUALIZER_HIGH_GAIN, changed);
-		if(changed) {
-			alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
+		if(!previousSettings_ || settings != *previousSettings_) {
+			apply_settings(settings);
+			previousSettings_ = settings;
 		}
 
 		const bool shouldConnect = settings.enabled;
@@ -162,17 +151,12 @@ private:
 		alFilterf_       = (LPALFILTERF)                  alGetProcAddress("alFilterf");
 	}
 
-	void update_band(
-		float value,
-		float &previous,
-		ALenum parameter,
-		bool &changed)
-	{
-		if(value == previous) return;
-
-		previous = value;
-		alEffectf_(effect_, parameter, value);
-		changed = true;
+	void apply_settings(const AppState::Player::EqualizerSettings &settings) {
+		alEffectf_(effect_, AL_EQUALIZER_LOW_GAIN,  settings.low);
+		alEffectf_(effect_, AL_EQUALIZER_MID1_GAIN, settings.mid1);
+		alEffectf_(effect_, AL_EQUALIZER_MID2_GAIN, settings.mid2);
+		alEffectf_(effect_, AL_EQUALIZER_HIGH_GAIN, settings.high);
+		alAuxSloti_(auxSlot_, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(effect_));
 	}
 
 	ALuint source_ = 0;
@@ -183,10 +167,7 @@ private:
 	bool connected_ = false;
 
 	std::atomic<AppState::Player::EqualizerSettings> &settings_;
-	float previousLow_ = -1.f;
-	float previousMid1_ = -1.f;
-	float previousMid2_ = -1.f;
-	float previousHigh_ = -1.f;
+	std::optional<AppState::Player::EqualizerSettings> previousSettings_;
 
 	LPALGENEFFECTS alGenEffects_ = nullptr;
 	LPALDELETEEFFECTS alDeleteEffects_ = nullptr;
