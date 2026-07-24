@@ -6,6 +6,9 @@ Collects MOD/XM/IT/S3M and related tracker module files into a local SQLite
 database, plays them via libxmp and OpenAL Soft with EBU R128 loudness
 normalization, and provides a Dear ImGui GUI with docking support.
 
+See [Known issues](KNOWN_ISSUES.md) for limitations on particular OpenAL
+implementations.
+
 ## License
 [GNU General Public License v2.0 or later](https://spdx.org/licenses/GPL-2.0-or-later.html)
 

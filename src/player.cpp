@@ -119,6 +119,18 @@ class OpenAlEqualizer {
 		m_alAuxSloti(m_auxSlot, AL_EFFECTSLOT_EFFECT, static_cast<ALint>(m_effect));
 	}
 
+	void set_enabled(bool enabled) {
+		if(enabled) {
+			alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
+				static_cast<ALint>(m_auxSlot), 0, AL_FILTER_NULL);
+			alSourcei(m_source, AL_DIRECT_FILTER, static_cast<ALint>(m_silentFilter));
+		} else {
+			alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
+				AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
+			alSourcei(m_source, AL_DIRECT_FILTER, AL_FILTER_NULL);
+		}
+	}
+
 public:
 	explicit OpenAlEqualizer(std::atomic<AppState::Player::EqualizerSettings> &settings)
 		: m_settings(settings)
@@ -151,11 +163,8 @@ public:
 		m_alFilterf(m_silentFilter, AL_LOWPASS_GAIN,   0.0f);
 		m_alFilterf(m_silentFilter, AL_LOWPASS_GAINHF, 0.0f);
 
-		if(settings.enabled) {
-			alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
-				static_cast<ALint>(m_auxSlot), 0, AL_FILTER_NULL);
-			alSourcei(m_source, AL_DIRECT_FILTER, static_cast<ALint>(m_silentFilter));
-		}
+		if(settings.enabled)
+			set_enabled(true);
 		m_available = true;
 		AL_CHECK;
 	}
@@ -168,17 +177,8 @@ public:
 		if(settings != m_previousSettings) {
 			apply_gains(settings);
 
-			if(settings.enabled != m_previousSettings.enabled) {
-				if(settings.enabled) {
-					alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
-						static_cast<ALint>(m_auxSlot), 0, AL_FILTER_NULL);
-					alSourcei(m_source, AL_DIRECT_FILTER, static_cast<ALint>(m_silentFilter));
-				} else {
-					alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
-						AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
-					alSourcei(m_source, AL_DIRECT_FILTER, AL_FILTER_NULL);
-				}
-			}
+			if(settings.enabled != m_previousSettings.enabled)
+				set_enabled(settings.enabled);
 			m_previousSettings = settings;
 		}
 		AL_CHECK;
