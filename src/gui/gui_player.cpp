@@ -92,9 +92,9 @@ void gui_player(AppState &app) {
 	}
 
 	{
-		bool skip = app.player.state.skip_trailing_silence.load();
+		bool skip = app.config.player.skip_trailing_silence.load();
 		if(ImGui::Checkbox("Skip trailing silence", &skip)) {
-			app.player.state.skip_trailing_silence.store(skip);
+			app.config.player.skip_trailing_silence.store(skip);
 		}
 	}
 
@@ -135,13 +135,13 @@ void gui_player(AppState &app) {
 	}
 	ImGui::Separator();
 	{
-		float gain = app.player.state.gain;
+		float gain = app.config.player.gain;
 		if(ImGui::SliderFloat("Player Gain", &gain, 0.0f, 2.0f)) {
-			app.player.state.gain.store(gain);
+			app.config.player.gain.store(gain);
 		}
 		ImGui::SameLine();
 		if(ImGui::Button("R##pgain")) {
-			app.player.state.gain.store(1.0f);
+			app.config.player.gain.store(1.0f);
 		}
 	}
 	ImGui::Separator();
@@ -164,13 +164,13 @@ void gui_player(AppState &app) {
 	}
 	ImGui::Separator();
 	{
-		float sw = app.player.state.stereo_width.load();
+		float sw = app.config.player.stereo_width.load();
 		if(ImGui::SliderFloat("Stereo width", &sw, 0.0f, 1.0f)) {
-			app.player.state.stereo_width.store(sw);
+			app.config.player.stereo_width.store(sw);
 		}
 		ImGui::SameLine();
 		if(ImGui::Button("R##sw")) {
-			app.player.state.stereo_width.store(0.4f);
+			app.config.player.stereo_width.store(0.4f);
 		}
 	}
 	ImGui::End();

@@ -586,7 +586,7 @@ static int get_Volume(
 	auto &app = *static_cast<AppState*>(userdata);
 	int r;
 	
-	double vol = app.player.state.gain;
+	double vol = app.config.player.gain;
 	
 	r = sd_bus_message_append_basic(reply, SD_BUS_TYPE_DOUBLE, &vol);
 	if(r < 0) {
@@ -616,7 +616,7 @@ static int set_Volume(
 	
 	vol = std::clamp(vol, 0.0, 1.0);
 	
-	app.player.state.gain.store(static_cast<float>(vol));
+	app.config.player.gain.store(static_cast<float>(vol));
 	
 	r = sd_bus_reply_method_return(value, "");
 	if(r < 0) {

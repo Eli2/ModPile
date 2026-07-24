@@ -14,6 +14,16 @@ TEST_CASE("resetting database state drops stale rows navigation and requests", "
 	app.gl_context = gl_context;
 	app.config.database.path = "/tmp/preserved.db";
 	app.config.player.target_loudness = -20.0;
+	app.config.player.gain = 0.75f;
+	app.config.player.stereo_width = 0.6f;
+	auto equalizer = app.config.player.equalizer.load();
+	equalizer.enabled = false;
+	equalizer.low_db = -2.0f;
+	equalizer.mid1_db = 1.5f;
+	equalizer.mid2_db = 3.0f;
+	equalizer.high_db = -4.5f;
+	app.config.player.equalizer = equalizer;
+	app.config.player.skip_trailing_silence = false;
 
 	app.pile.request.executeQuery = true;
 	app.pile.state.query.offset = 40;
@@ -81,4 +91,8 @@ TEST_CASE("resetting database state drops stale rows navigation and requests", "
 	CHECK(app.gl_context == gl_context);
 	CHECK(app.config.database.path == "/tmp/preserved.db");
 	CHECK(app.config.player.target_loudness == -20.0);
+	CHECK(app.config.player.gain.load() == 0.75f);
+	CHECK(app.config.player.stereo_width.load() == 0.6f);
+	CHECK(app.config.player.equalizer.load() == equalizer);
+	CHECK_FALSE(app.config.player.skip_trailing_silence.load());
 }

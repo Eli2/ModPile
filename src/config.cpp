@@ -58,24 +58,24 @@ void config_load(AppState &app) {
 	if(auto v = r.get_integer("numblock", "vid"))       app.config.numblock.vid = static_cast<unsigned short>(*v);
 	if(auto v = r.get_integer("numblock", "pid"))       app.config.numblock.pid = static_cast<unsigned short>(*v);
 
-	if(auto v = r.get_float("player", "gain"))             app.player.state.gain.store(static_cast<float>(*v));
-	if(auto v = r.get_float("player", "stereo_width"))    app.player.state.stereo_width.store(static_cast<float>(*v));
+	if(auto v = r.get_float("player", "gain"))             app.config.player.gain.store(static_cast<float>(*v));
+	if(auto v = r.get_float("player", "stereo_width"))    app.config.player.stereo_width.store(static_cast<float>(*v));
 	if(auto v = r.get_float("player", "target_loudness")) app.config.player.target_loudness = *v;
-	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.player.state.skip_trailing_silence = *v;
+	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.config.player.skip_trailing_silence = *v;
 
-	auto equalizer = app.player.state.equalizer.load();
+	auto equalizer = app.config.player.equalizer.load();
 	auto clamp_db = [](double value) {
 		return std::clamp(
 			static_cast<float>(value),
-			AppState::Player::EqualizerSettings::min_db,
-			AppState::Player::EqualizerSettings::max_db);
+			AppState::Config::Player::EqualizerSettings::min_db,
+			AppState::Config::Player::EqualizerSettings::max_db);
 	};
 	if(auto v = r.get_float("eq", "low"))     equalizer.low_db = clamp_db(*v);
 	if(auto v = r.get_float("eq", "mid1"))    equalizer.mid1_db = clamp_db(*v);
 	if(auto v = r.get_float("eq", "mid2"))    equalizer.mid2_db = clamp_db(*v);
 	if(auto v = r.get_float("eq", "high"))    equalizer.high_db = clamp_db(*v);
 	if(auto v = r.get_bool ("eq", "enabled")) equalizer.enabled = *v;
-	app.player.state.equalizer.store(equalizer);
+	app.config.player.equalizer.store(equalizer);
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
@@ -104,12 +104,12 @@ void config_save(AppState &app) {
 	w.write_hex("pid", app.config.numblock.pid);
 
 	w.section("player");
-	w.write("gain",             static_cast<double>(app.player.state.gain.load()));
-	w.write("stereo_width",     static_cast<double>(app.player.state.stereo_width.load()));
+	w.write("gain",             static_cast<double>(app.config.player.gain.load()));
+	w.write("stereo_width",     static_cast<double>(app.config.player.stereo_width.load()));
 	w.write("target_loudness",  app.config.player.target_loudness);
-	w.write("skip_trailing_silence", app.player.state.skip_trailing_silence.load());
+	w.write("skip_trailing_silence", app.config.player.skip_trailing_silence.load());
 
-	const auto equalizer = app.player.state.equalizer.load();
+	const auto equalizer = app.config.player.equalizer.load();
 	w.section("eq");
 	w.write("enabled", equalizer.enabled);
 	w.write("low",     static_cast<double>(equalizer.low_db));

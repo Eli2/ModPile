@@ -55,7 +55,25 @@ struct AppState {
 			fs::path path;  // empty = not configured
 		} database;
 		struct Player {
+			struct EqualizerSettings {
+				static constexpr float min_db = -18.0f;
+				static constexpr float max_db = 18.0f;
+
+				bool enabled = true;
+				float low_db  = 0.0f;
+				float mid1_db = 0.0f;
+				float mid2_db = 0.0f;
+				float high_db = 0.0f;
+
+				bool operator==(const EqualizerSettings &) const = default;
+			};
+			static_assert(std::is_trivially_copyable_v<EqualizerSettings>);
+
 			double target_loudness = -14;
+			std::atomic<float> gain = 1.0f;
+			std::atomic<float> stereo_width = 0.4f;
+			std::atomic<EqualizerSettings> equalizer = EqualizerSettings{};
+			std::atomic<bool> skip_trailing_silence = true;
 		} player;
 		struct NumBlock {
 			bool           enabled = false;
@@ -74,20 +92,6 @@ struct AppState {
 		std::atomic_bool switch_database = false;
 	} request;
 	struct Player {
-		struct EqualizerSettings {
-			static constexpr float min_db = -18.0f;
-			static constexpr float max_db = 18.0f;
-
-			bool enabled = true;
-			float low_db  = 0.0f;
-			float mid1_db = 0.0f;
-			float mid2_db = 0.0f;
-			float high_db = 0.0f;
-
-			bool operator==(const EqualizerSettings &) const = default;
-		};
-		static_assert(std::is_trivially_copyable_v<EqualizerSettings>);
-
 		struct Request {
 			std::atomic_bool prev = false;
 			std::atomic_bool play = false;
@@ -120,13 +124,9 @@ struct AppState {
 				Playlist
 			};
 			std::atomic<Loop>    loop_status = Loop::None;
-			std::atomic<float>   gain = 1.f;
 			std::atomic<bool>    shuffle = false;
-			std::atomic<float>   stereo_width = 0.4f;
 			std::atomic<int64_t> current_playlist_track_id = 0;
 			std::atomic<int64_t> current_playing_playlist_id = 0;
-			std::atomic<EqualizerSettings> equalizer = EqualizerSettings{};
-			std::atomic<bool>    skip_trailing_silence = true;
 			std::atomic<bool>    in_charts_mode = false;
 		} state;
 		struct Track {

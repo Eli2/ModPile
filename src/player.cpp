@@ -51,8 +51,10 @@ do { \
 namespace {
 
 class OpenAlEqualizer {
-	std::atomic<AppState::Player::EqualizerSettings> &m_settings;
-	AppState::Player::EqualizerSettings m_previousSettings;
+	using Settings = AppState::Config::Player::EqualizerSettings;
+
+	std::atomic<Settings> &m_settings;
+	Settings m_previousSettings;
 
 	ALuint m_source = 0;
 	ALuint m_auxSlot = 0;
@@ -102,12 +104,12 @@ class OpenAlEqualizer {
 	static float db_to_gain(float db, float min_gain, float max_gain) {
 		const float clampedDb = std::clamp(
 			db,
-			AppState::Player::EqualizerSettings::min_db,
-			AppState::Player::EqualizerSettings::max_db);
+			Settings::min_db,
+			Settings::max_db);
 		return std::clamp(std::pow(10.0f, clampedDb / 20.0f), min_gain, max_gain);
 	}
 
-	void apply_gains(const AppState::Player::EqualizerSettings &settings) {
+	void apply_gains(const Settings &settings) {
 		m_alEffectf(m_effect, AL_EQUALIZER_LOW_GAIN,
 			db_to_gain(settings.low_db, AL_EQUALIZER_MIN_LOW_GAIN, AL_EQUALIZER_MAX_LOW_GAIN));
 		m_alEffectf(m_effect, AL_EQUALIZER_MID1_GAIN,
@@ -132,7 +134,7 @@ class OpenAlEqualizer {
 	}
 
 public:
-	explicit OpenAlEqualizer(std::atomic<AppState::Player::EqualizerSettings> &settings)
+	explicit OpenAlEqualizer(std::atomic<Settings> &settings)
 		: m_settings(settings)
 	{}
 
@@ -255,7 +257,7 @@ bool player_init(AppState &app) {
 		ALCcontext           *alContext = nullptr;
 		ALuint                alSource  = 0;
 		std::array<ALuint, 6> alBuffers = {};
-		OpenAlEqualizer equalizer(app.player.state.equalizer);
+		OpenAlEqualizer equalizer(app.config.player.equalizer);
 		
 		auto openDev = [&]()->auto {
 			alDevice = alcOpenDevice(NULL);
@@ -293,8 +295,8 @@ bool player_init(AppState &app) {
 			
 			alSourcei(alSource, AL_STEREO_MODE_SOFT, AL_SUPER_STEREO_SOFT);
 			AL_CHECK;
-			alSourcef(alSource, AL_SUPER_STEREO_WIDTH_SOFT, app.player.state.stereo_width.load());
-			alListenerf(AL_GAIN, app.player.state.gain.load());
+			alSourcef(alSource, AL_SUPER_STEREO_WIDTH_SOFT, app.config.player.stereo_width.load());
+			alListenerf(AL_GAIN, app.config.player.gain.load());
 			AL_CHECK;
 			alSourcef(alSource, AL_MIN_GAIN, 0.f);
 			AL_CHECK;
@@ -671,7 +673,7 @@ bool player_init(AppState &app) {
 			xmp_get_frame_info(ctx, &fi);
 
 			const bool skipTrailingSilence =
-				app.player.state.skip_trailing_silence.load() && audibleDuration.has_value();
+				app.config.player.skip_trailing_silence.load() && audibleDuration.has_value();
 			if(skipTrailingSilence && fi.time >= audibleDuration.value()) {
 				// This is a natural completion, not a user-requested skip. Leave
 				// nextWasRequested clear so play/skip accounting remains correct.
@@ -718,7 +720,7 @@ bool player_init(AppState &app) {
 			}
 
 			{
-				float g = app.player.state.gain.load();
+				float g = app.config.player.gain.load();
 				if(g != prev_gain) {
 					prev_gain = g;
 					alListenerf(AL_GAIN, g);
@@ -734,7 +736,7 @@ bool player_init(AppState &app) {
 				}
 			}
 			{
-				float sw = app.player.state.stereo_width.load();
+				float sw = app.config.player.stereo_width.load();
 				if(sw != prev_stereo_width) {
 					prev_stereo_width = sw;
 					alSourcef(alSource, AL_SUPER_STEREO_WIDTH_SOFT, sw);

@@ -118,7 +118,7 @@ void gui_indexer(AppState &app) {
 void gui_equalizer(AppState &app) {
 	ImGui::Begin("Equalizer");
 
-	auto settings = app.player.state.equalizer.load();
+	auto settings = app.config.player.equalizer.load();
 	bool changed = false;
 	{
 		changed |= ImGui::Checkbox("EQ", &settings.enabled);
@@ -149,8 +149,8 @@ void gui_equalizer(AppState &app) {
 				"##eq",
 				ImVec2(40, sliderHeight),
 				&bands[i].db,
-				AppState::Player::EqualizerSettings::min_db,
-				AppState::Player::EqualizerSettings::max_db,
+				AppState::Config::Player::EqualizerSettings::min_db,
+				AppState::Config::Player::EqualizerSettings::max_db,
 				"%+5.1f"))
 			{
 				changed = true;
@@ -162,7 +162,7 @@ void gui_equalizer(AppState &app) {
 		}
 	}
 	if(changed) {
-		app.player.state.equalizer.store(settings);
+		app.config.player.equalizer.store(settings);
 	}
 
 	ImGui::End();
