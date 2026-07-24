@@ -143,15 +143,15 @@ public:
 			apply_gains(settings);
 
 			if(settings.enabled != m_previousSettings.enabled) {
-				const ALint slot = settings.enabled
-					? static_cast<ALint>(m_auxSlot)
-					: AL_EFFECTSLOT_NULL;
-				const ALint directFilter = settings.enabled
-					? static_cast<ALint>(m_silentFilter)
-					: AL_FILTER_NULL;
-				alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
-					slot, 0, AL_FILTER_NULL);
-				alSourcei(m_source, AL_DIRECT_FILTER, directFilter);
+				if(settings.enabled) {
+					alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
+						static_cast<ALint>(m_auxSlot), 0, AL_FILTER_NULL);
+					alSourcei(m_source, AL_DIRECT_FILTER, static_cast<ALint>(m_silentFilter));
+				} else {
+					alSource3i(m_source, AL_AUXILIARY_SEND_FILTER,
+						AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
+					alSourcei(m_source, AL_DIRECT_FILTER, AL_FILTER_NULL);
+				}
 			}
 			m_previousSettings = settings;
 		}
