@@ -48,48 +48,38 @@ void config_load(AppState &app) {
 		return;
 	}
 
-	if(auto v = r.get_string ("database", "path"))
-		app.config.database.path = *v;
+	r.get(app.config.database.path, "database", "path");
 
-	if(auto v = r.get_integer("window",   "width"))
-		app.config.window.width  = static_cast<int>(*v);
-	if(auto v = r.get_integer("window",   "height"))
-		app.config.window.height = static_cast<int>(*v);
+	r.get(app.config.window.width,  "window", "width");
+	r.get(app.config.window.height, "window", "height");
 
-	if(auto v = r.get_bool   ("numblock", "enabled"))
-		app.config.numblock.enabled = *v;
-	if(auto v = r.get_integer("numblock", "vid"))
-		app.config.numblock.vid = static_cast<unsigned short>(*v);
-	if(auto v = r.get_integer("numblock", "pid"))
-		app.config.numblock.pid = static_cast<unsigned short>(*v);
+	r.get(app.config.numblock.enabled, "numblock", "enabled");
+	r.get(app.config.numblock.vid,     "numblock", "vid");
+	r.get(app.config.numblock.pid,     "numblock", "pid");
 
-	if(auto v = r.get_float("player", "gain"))
-		app.config.player.gain.store(static_cast<float>(*v));
-	if(auto v = r.get_float("player", "stereo_width"))
-		app.config.player.stereo_width.store(static_cast<float>(*v));
-	if(auto v = r.get_float("player", "target_loudness"))
-		app.config.player.target_loudness = *v;
-	if(auto v = r.get_bool ("player", "skip_trailing_silence"))
-		app.config.player.skip_trailing_silence = *v;
+	r.get(app.config.player.gain,                  "player", "gain");
+	r.get(app.config.player.stereo_width,          "player", "stereo_width");
+	r.get(app.config.player.target_loudness,       "player", "target_loudness");
+	r.get(app.config.player.skip_trailing_silence, "player", "skip_trailing_silence");
 
 	auto equalizer = app.config.player.equalizer.load();
-	auto clamp_db = [](double value) {
+	auto clamp_db = [](float value) {
 		return std::clamp(
-			static_cast<float>(value),
+			value,
 			AppState::Config::Player::EqualizerSettings::min_db,
 			AppState::Config::Player::EqualizerSettings::max_db);
 	};
 	
-	if(auto v = r.get_float("eq", "low"))
-		equalizer.low_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "mid1"))
-		equalizer.mid1_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "mid2"))
-		equalizer.mid2_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "high"))
-		equalizer.high_db = clamp_db(*v);
-	if(auto v = r.get_bool ("eq", "enabled"))
-		equalizer.enabled = *v;
+	r.get(equalizer.low_db,  "eq", "low");
+	r.get(equalizer.mid1_db, "eq", "mid1");
+	r.get(equalizer.mid2_db, "eq", "mid2");
+	r.get(equalizer.high_db, "eq", "high");
+	r.get(equalizer.enabled, "eq", "enabled");
+
+	equalizer.low_db  = clamp_db(equalizer.low_db);
+	equalizer.mid1_db = clamp_db(equalizer.mid1_db);
+	equalizer.mid2_db = clamp_db(equalizer.mid2_db);
+	equalizer.high_db = clamp_db(equalizer.high_db);
 	
 	app.config.player.equalizer.store(equalizer);
 }

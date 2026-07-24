@@ -49,6 +49,33 @@ TEST_CASE("TOML reader accepts integers where callers request floats", "[toml][r
 	CHECK(reader.get_integer("player", "gain") == 2);
 }
 
+TEST_CASE("TOML reader assigns values to application types", "[toml][reader]") {
+	auto reader = read_toml(R"(
+		[values]
+		path = "/tmp/music"
+		integer = -42
+		fraction = 1.25
+		enabled = true
+	)");
+
+	std::filesystem::path path;
+	int integer = 0;
+	std::atomic<float> fraction = 0.0f;
+	bool enabled = false;
+
+	CHECK(reader.get(path, "values", "path"));
+	CHECK(reader.get(integer, "values", "integer"));
+	CHECK(reader.get(fraction, "values", "fraction"));
+	CHECK(reader.get(enabled, "values", "enabled"));
+	CHECK(path == "/tmp/music");
+	CHECK(integer == -42);
+	CHECK(fraction.load() == 1.25f);
+	CHECK(enabled);
+
+	CHECK_FALSE(reader.get(integer, "values", "missing"));
+	CHECK(integer == -42);
+}
+
 TEST_CASE("TOML reader keeps scalar types distinct", "[toml][reader]") {
 	auto reader = read_toml(R"(
 		[values]

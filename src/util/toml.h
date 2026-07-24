@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <filesystem>
 #include <iosfwd>
@@ -35,6 +36,38 @@ public:
 	std::optional<int64_t>     get_integer(std::string_view section, std::string_view key) const;
 	std::optional<double>      get_float  (std::string_view section, std::string_view key) const;
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
+
+	bool get(std::string &value, std::string_view section, std::string_view key) const;
+	bool get(std::filesystem::path &value, std::string_view section, std::string_view key) const;
+	bool get(bool &value, std::string_view section, std::string_view key) const;
+
+	template<std::integral T>
+		requires (!std::same_as<std::remove_cv_t<T>, bool>)
+	bool get(T &value, std::string_view section, std::string_view key) const {
+		auto parsed = get_integer(section, key);
+		if(!parsed)
+			return false;
+		value = static_cast<T>(*parsed);
+		return true;
+	}
+
+	template<std::floating_point T>
+	bool get(T &value, std::string_view section, std::string_view key) const {
+		auto parsed = get_float(section, key);
+		if(!parsed)
+			return false;
+		value = static_cast<T>(*parsed);
+		return true;
+	}
+
+	template<typename T>
+	bool get(std::atomic<T> &value, std::string_view section, std::string_view key) const {
+		auto parsed = value.load();
+		if(!get(parsed, section, key))
+			return false;
+		value.store(parsed);
+		return true;
+	}
 
 private:
 	// key = "section.key"

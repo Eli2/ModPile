@@ -213,6 +213,42 @@ std::optional<bool> TomlReader::get_bool(std::string_view section, std::string_v
 	return v->b;
 }
 
+bool TomlReader::get(
+	std::string &value,
+	std::string_view section,
+	std::string_view key) const
+{
+	auto parsed = get_string(section, key);
+	if(!parsed)
+		return false;
+	value = std::move(*parsed);
+	return true;
+}
+
+bool TomlReader::get(
+	std::filesystem::path &value,
+	std::string_view section,
+	std::string_view key) const
+{
+	std::string parsed;
+	if(!get(parsed, section, key))
+		return false;
+	value = std::move(parsed);
+	return true;
+}
+
+bool TomlReader::get(
+	bool &value,
+	std::string_view section,
+	std::string_view key) const
+{
+	auto parsed = get_bool(section, key);
+	if(!parsed)
+		return false;
+	value = *parsed;
+	return true;
+}
+
 // ─── TomlWriter ──────────────────────────────────────────────────────────────
 
 static std::string_view newline_for(std::string_view document) {
