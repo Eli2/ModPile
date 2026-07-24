@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <string>
 #include <SDL3/SDL_stdinc.h>
 
 namespace fs = std::filesystem;
@@ -49,19 +48,29 @@ void config_load(AppState &app) {
 		return;
 	}
 
-	if(auto v = r.get_string ("database", "path")) app.config.database.path = *v;
+	if(auto v = r.get_string ("database", "path"))
+		app.config.database.path = *v;
 
-	if(auto v = r.get_integer("window",   "width"))     app.config.window.width  = static_cast<int>(*v);
-	if(auto v = r.get_integer("window",   "height"))    app.config.window.height = static_cast<int>(*v);
+	if(auto v = r.get_integer("window",   "width"))
+		app.config.window.width  = static_cast<int>(*v);
+	if(auto v = r.get_integer("window",   "height"))
+		app.config.window.height = static_cast<int>(*v);
 
-	if(auto v = r.get_bool   ("numblock", "enabled"))   app.config.numblock.enabled = *v;
-	if(auto v = r.get_integer("numblock", "vid"))       app.config.numblock.vid = static_cast<unsigned short>(*v);
-	if(auto v = r.get_integer("numblock", "pid"))       app.config.numblock.pid = static_cast<unsigned short>(*v);
+	if(auto v = r.get_bool   ("numblock", "enabled"))
+		app.config.numblock.enabled = *v;
+	if(auto v = r.get_integer("numblock", "vid"))
+		app.config.numblock.vid = static_cast<unsigned short>(*v);
+	if(auto v = r.get_integer("numblock", "pid"))
+		app.config.numblock.pid = static_cast<unsigned short>(*v);
 
-	if(auto v = r.get_float("player", "gain"))             app.config.player.gain.store(static_cast<float>(*v));
-	if(auto v = r.get_float("player", "stereo_width"))    app.config.player.stereo_width.store(static_cast<float>(*v));
-	if(auto v = r.get_float("player", "target_loudness")) app.config.player.target_loudness = *v;
-	if(auto v = r.get_bool ("player", "skip_trailing_silence")) app.config.player.skip_trailing_silence = *v;
+	if(auto v = r.get_float("player", "gain"))
+		app.config.player.gain.store(static_cast<float>(*v));
+	if(auto v = r.get_float("player", "stereo_width"))
+		app.config.player.stereo_width.store(static_cast<float>(*v));
+	if(auto v = r.get_float("player", "target_loudness"))
+		app.config.player.target_loudness = *v;
+	if(auto v = r.get_bool ("player", "skip_trailing_silence"))
+		app.config.player.skip_trailing_silence = *v;
 
 	auto equalizer = app.config.player.equalizer.load();
 	auto clamp_db = [](double value) {
@@ -70,11 +79,18 @@ void config_load(AppState &app) {
 			AppState::Config::Player::EqualizerSettings::min_db,
 			AppState::Config::Player::EqualizerSettings::max_db);
 	};
-	if(auto v = r.get_float("eq", "low"))     equalizer.low_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "mid1"))    equalizer.mid1_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "mid2"))    equalizer.mid2_db = clamp_db(*v);
-	if(auto v = r.get_float("eq", "high"))    equalizer.high_db = clamp_db(*v);
-	if(auto v = r.get_bool ("eq", "enabled")) equalizer.enabled = *v;
+	
+	if(auto v = r.get_float("eq", "low"))
+		equalizer.low_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "mid1"))
+		equalizer.mid1_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "mid2"))
+		equalizer.mid2_db = clamp_db(*v);
+	if(auto v = r.get_float("eq", "high"))
+		equalizer.high_db = clamp_db(*v);
+	if(auto v = r.get_bool ("eq", "enabled"))
+		equalizer.enabled = *v;
+	
 	app.config.player.equalizer.store(equalizer);
 }
 
