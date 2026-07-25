@@ -235,6 +235,59 @@ TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writ
 	      "disabled = false\n");
 }
 
+TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {
+	TomlDocument document;
+	document.comments.push_back({" generated document", 0, 1, 1, false});
+
+	TomlValue title{TomlValue::Type::String};
+	title.str = "demo";
+	document.root.insert("title", std::move(title));
+
+	TomlValue values{TomlValue::Type::Table};
+	TomlValue enabled{TomlValue::Type::Bool};
+	enabled.b = true;
+	values.insert("enabled", std::move(enabled));
+	TomlValue numbers{TomlValue::Type::Array};
+	for (const int number : {1, 2}) {
+		TomlValue element{TomlValue::Type::Integer};
+		element.i = number;
+		numbers.array.push_back(std::move(element));
+	}
+	values.insert("numbers", std::move(numbers));
+
+	TomlValue nested{TomlValue::Type::Table};
+	TomlValue date{TomlValue::Type::DateLocal};
+	date.str = "2026-07-25";
+	nested.insert("date", std::move(date));
+	values.insert("nested", std::move(nested));
+	document.root.insert("values", std::move(values));
+
+	TomlWriter writer;
+	writer.set_document(std::move(document));
+	REQUIRE(writer.document().root.table[0].first == "title");
+	REQUIRE(writer.document().root.table[1].first == "values");
+
+	std::ostringstream output;
+	REQUIRE(writer.save(output));
+	CHECK(output.str() ==
+	      "# generated document\n"
+	      "\n"
+	      "title = \"demo\"\n"
+	      "\n"
+	      "[values]\n"
+	      "enabled = true\n"
+	      "numbers = [1, 2]\n"
+	      "\n"
+	      "[values.nested]\n"
+	      "date = 2026-07-25\n");
+
+	std::istringstream input(output.str());
+	TomlReader reader;
+	REQUIRE(reader.load(input));
+	CHECK(reader.get_string("", "title") == "demo");
+	CHECK(reader.get_bool("values", "enabled") == true);
+}
+
 TEST_CASE("TOML writer escapes basic strings and round-trips them", "[toml][writer]") {
 	const std::string expected = "quote \" slash \\ newline\n tab\t carriage\r";
 	TomlWriter writer;

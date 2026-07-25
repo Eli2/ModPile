@@ -17,6 +17,13 @@ add_executable(ModPileTomlTestDecoder
 target_link_libraries(ModPileTomlTestDecoder PRIVATE
 	ModPile::Toml
 )
+
+add_executable(ModPileTomlTestEncoder
+	toml_test_encoder.cpp
+)
+target_link_libraries(ModPileTomlTestEncoder PRIVATE
+	ModPile::Toml
+)
 add_test(
 	NAME ModPileTomlTestDecoderSmoke
 	COMMAND
@@ -25,6 +32,15 @@ add_test(
 		"-DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/decoder_smoke.toml"
 		"-DEXPECTED=${CMAKE_CURRENT_SOURCE_DIR}/decoder_smoke.json"
 		-P "${CMAKE_CURRENT_SOURCE_DIR}/decoder_smoke.cmake"
+)
+add_test(
+	NAME ModPileTomlTestEncoderSmoke
+	COMMAND
+		"${CMAKE_COMMAND}"
+		"-DENCODER=$<TARGET_FILE:ModPileTomlTestEncoder>"
+		"-DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/decoder_smoke.json"
+		"-DEXPECTED=${CMAKE_CURRENT_SOURCE_DIR}/decoder_smoke.toml"
+		-P "${CMAKE_CURRENT_SOURCE_DIR}/encoder_smoke.cmake"
 )
 
 set(
@@ -51,7 +67,8 @@ if(_modpile_toml_test_program)
 			test
 			-toml=1.0
 			"-decoder=$<TARGET_FILE:ModPileTomlTestDecoder>"
-		DEPENDS ModPileTomlTestDecoder
+			"-encoder=$<TARGET_FILE:ModPileTomlTestEncoder>"
+		DEPENDS ModPileTomlTestDecoder ModPileTomlTestEncoder
 		USES_TERMINAL
 	)
 else()
@@ -60,7 +77,7 @@ else()
 			"${CMAKE_COMMAND}" -E echo
 			"Install the toml-test binary or set MODPILE_TOML_TEST_EXECUTABLE."
 		COMMAND "${CMAKE_COMMAND}" -E false
-		DEPENDS ModPileTomlTestDecoder
+		DEPENDS ModPileTomlTestDecoder ModPileTomlTestEncoder
 		USES_TERMINAL
 	)
 endif()

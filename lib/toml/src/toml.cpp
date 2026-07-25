@@ -1030,28 +1030,29 @@ bool TomlWriter::load(std::istream &input) {
 	}
 	if (input.bad()) return false;
 	m_source_document = std::move(document);
-	m_sections.clear();
+	m_document = {};
 	m_current_section.reset();
 	return true;
 }
 
 void TomlWriter::section(std::string_view name) {
-	for (size_t i = 0; i < m_sections.size(); ++i) {
-		if (m_sections[i].name == name) {
-			m_current_section = i;
-			return;
-		}
+	auto *value = m_document.root.find(name);
+	if (!value) {
+		TomlValue table{TomlValue::Type::Table};
+		table.explicit_table = true;
+		m_document.root.insert(std::string(name), std::move(table));
+	} else if (value->type != TomlValue::Type::Table) {
+		m_current_section.reset();
+		return;
 	}
-
-	m_sections.push_back({std::string(name), {}});
-	m_current_section = m_sections.size() - 1;
+	m_current_section = std::string(name);
 }
 
 static std::string escape_string(std::string_view s) {
 	std::string out;
 	out.reserve(s.size() + 2);
 	out += '"';
-	for (char c : s) {
+	for (const unsigned char c : s) {
 		switch (c) {
 			case '\b': out += "\\b";  break;
 			case '\f': out += "\\f";  break;
@@ -1060,7 +1061,13 @@ static std::string escape_string(std::string_view s) {
 			case '\n': out += "\\n";  break;
 			case '\r': out += "\\r";  break;
 			case '\t': out += "\\t";  break;
-			default:   out += c;      break;
+			default:
+				if (c < 0x20 || c == 0x7f) {
+					out += std::format("\\u{:04X}", c);
+				} else {
+					out += static_cast<char>(c);
+				}
+				break;
 		}
 	}
 	out += '"';
@@ -1068,37 +1075,52 @@ static std::string escape_string(std::string_view s) {
 }
 
 void TomlWriter::write(std::string_view key, std::string_view value) {
-	write_value(key, escape_string(value));
+	TomlValue toml_value{TomlValue::Type::String};
+	toml_value.str = value;
+	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, int64_t value) {
-	write_value(key, std::to_string(value));
+	TomlValue toml_value{TomlValue::Type::Integer};
+	toml_value.i = value;
+	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write_hex(std::string_view key, int64_t value) {
-	write_value(key, std::format("0x{:04x}", static_cast<uint64_t>(value)));
+	TomlValue toml_value{TomlValue::Type::Integer};
+	toml_value.i = value;
+	toml_value.lexical = std::format("0x{:04x}", static_cast<uint64_t>(value));
+	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, double value) {
-	// Integral-looking output is accepted by get_float() as well.
-	write_value(key, std::format("{:.7g}", value));
+	TomlValue toml_value{TomlValue::Type::Float};
+	toml_value.f = value;
+	toml_value.lexical = std::format("{:.7g}", value);
+	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, bool value) {
-	write_value(key, value ? "true" : "false");
+	TomlValue toml_value{TomlValue::Type::Bool};
+	toml_value.b = value;
+	write_value(key, std::move(toml_value));
 }
 
-void TomlWriter::write_value(std::string_view key, std::string value) {
-	if (!m_current_section) return;
+void TomlWriter::set_document(TomlDocument document) {
+	m_document = std::move(document);
+	m_source_document.clear();
+	m_current_section.reset();
+}
 
-	auto &entries = m_sections[*m_current_section].entries;
-	for (auto &entry : entries) {
-		if (entry.key == key) {
-			entry.value = std::move(value);
-			return;
-		}
+void TomlWriter::write_value(std::string_view key, TomlValue value) {
+	if (!m_current_section) return;
+	auto *section_value = m_document.root.find(*m_current_section);
+	if (!section_value || section_value->type != TomlValue::Type::Table) return;
+	if (auto *existing = section_value->find(key)) {
+		*existing = std::move(value);
+		return;
 	}
-	entries.push_back({std::string(key), std::move(value)});
+	section_value->insert(std::string(key), std::move(value));
 }
 
 static void append_section(std::string &document, std::string_view name) {
@@ -1244,38 +1266,185 @@ static void reconcile_value(
 	document.insert(insertion, assignment);
 }
 
+static std::string serialize_key(std::string_view key) {
+	if (!key.empty() &&
+	    std::all_of(key.begin(), key.end(), [](char c) { return is_bare_key_char(c); })) {
+		return std::string(key);
+	}
+	return escape_string(key);
+}
+
+static std::string serialize_float(double value) {
+	if (std::isnan(value)) return "nan";
+	if (std::isinf(value)) return std::signbit(value) ? "-inf" : "inf";
+	char buffer[64];
+	const auto result = std::to_chars(
+		std::begin(buffer),
+		std::end(buffer),
+		value,
+		std::chars_format::general);
+	if (result.ec != std::errc{}) return "0.0";
+	std::string output(buffer, result.ptr);
+	if (output.find_first_of(".eE") == std::string::npos) output += ".0";
+	return output;
+}
+
+static std::string serialize_value(const TomlValue &value);
+
+static std::string serialize_inline_table(const TomlValue &value) {
+	std::string output = "{";
+	for (size_t i = 0; i < value.table.size(); ++i) {
+		if (i > 0) output += ", ";
+		output += serialize_key(value.table[i].first);
+		output += " = ";
+		output += serialize_value(value.table[i].second);
+	}
+	output += '}';
+	return output;
+}
+
+static std::string serialize_value(const TomlValue &value) {
+	if (!value.lexical.empty()) return value.lexical;
+	switch (value.type) {
+		case TomlValue::Type::String:
+			return escape_string(value.str);
+		case TomlValue::Type::Integer:
+			return std::to_string(value.i);
+		case TomlValue::Type::Float:
+			return serialize_float(value.f);
+		case TomlValue::Type::Bool:
+			return value.b ? "true" : "false";
+		case TomlValue::Type::DateTime:
+		case TomlValue::Type::DateTimeLocal:
+		case TomlValue::Type::DateLocal:
+		case TomlValue::Type::TimeLocal:
+			return value.str;
+		case TomlValue::Type::Array: {
+			std::string output = "[";
+			for (size_t i = 0; i < value.array.size(); ++i) {
+				if (i > 0) output += ", ";
+				output += serialize_value(value.array[i]);
+			}
+			output += ']';
+			return output;
+		}
+		case TomlValue::Type::Table:
+			return serialize_inline_table(value);
+	}
+	return {};
+}
+
+static bool is_table_array(const TomlValue &value) {
+	return value.type == TomlValue::Type::Array && value.array_of_tables;
+}
+
+static std::string serialize_path(const std::vector<std::string> &path) {
+	std::string output;
+	for (size_t i = 0; i < path.size(); ++i) {
+		if (i > 0) output += '.';
+		output += serialize_key(path[i]);
+	}
+	return output;
+}
+
+static void append_blank_line(std::string &output) {
+	if (output.empty()) return;
+	if (output.back() != '\n') output += '\n';
+	if (output.size() < 2 || output[output.size() - 2] != '\n') output += '\n';
+}
+
+static void serialize_table_contents(
+	std::string &output,
+	const TomlValue &table,
+	const std::vector<std::string> &path)
+{
+	for (const auto &[key, value] : table.table) {
+		if (value.type == TomlValue::Type::Table && !value.inline_table) continue;
+		if (is_table_array(value)) continue;
+		output += serialize_key(key);
+		output += " = ";
+		output += serialize_value(value);
+		output += '\n';
+	}
+
+	for (const auto &[key, value] : table.table) {
+		auto child_path = path;
+		child_path.push_back(key);
+		if (value.type == TomlValue::Type::Table && !value.inline_table) {
+			append_blank_line(output);
+			output += '[';
+			output += serialize_path(child_path);
+			output += "]\n";
+			serialize_table_contents(output, value, child_path);
+		} else if (is_table_array(value)) {
+			for (const auto &element : value.array) {
+				append_blank_line(output);
+				output += "[[";
+				output += serialize_path(child_path);
+				output += "]]\n";
+				serialize_table_contents(output, element, child_path);
+			}
+		}
+	}
+}
+
+static std::string serialize_document(const TomlDocument &document) {
+	std::string output;
+	for (const auto &comment : document.comments) {
+		output += '#';
+		output += comment.text;
+		output += '\n';
+	}
+	if (!document.comments.empty() && !document.root.table.empty()) output += '\n';
+	serialize_table_contents(output, document.root, {});
+	return output;
+}
+
 std::string TomlWriter::render(std::string document) const {
-	for (size_t i = 0; i < m_sections.size(); ++i) {
-		const auto &section = m_sections[i];
-		if (!find_section_begin(document, section.name)) {
+	if (document.empty()) return serialize_document(m_document);
+
+	for (size_t i = 0; i < m_document.root.table.size(); ++i) {
+		const auto &[section_name_value, section] = m_document.root.table[i];
+		if (section.type != TomlValue::Type::Table) continue;
+		if (!find_section_begin(document, section_name_value)) {
 			std::optional<size_t> next_section;
-			for (size_t j = i + 1; j < m_sections.size(); ++j) {
-				next_section = find_section_begin(document, m_sections[j].name);
+			for (size_t j = i + 1; j < m_document.root.table.size(); ++j) {
+				const auto &[next_name, next_value] = m_document.root.table[j];
+				if (next_value.type != TomlValue::Type::Table) continue;
+				next_section = find_section_begin(document, next_name);
 				if (next_section) break;
 			}
 			if (next_section) {
-				insert_section(document, *next_section, section.name);
+				insert_section(document, *next_section, section_name_value);
 			} else {
-				append_section(document, section.name);
+				append_section(document, section_name_value);
 			}
 		}
-		for (size_t j = 0; j < section.entries.size(); ++j) {
-			const auto &entry = section.entries[j];
+		for (size_t j = 0; j < section.table.size(); ++j) {
+			const auto &[entry_key, entry_value] = section.table[j];
+			if (entry_value.type == TomlValue::Type::Table || is_table_array(entry_value)) {
+				continue;
+			}
 			std::optional<size_t> next_key;
-			if (!find_key_begin(document, section.name, entry.key)) {
-				for (size_t k = j + 1; k < section.entries.size(); ++k) {
+			if (!find_key_begin(document, section_name_value, entry_key)) {
+				for (size_t k = j + 1; k < section.table.size(); ++k) {
+					const auto &[next_key_name, next_key_value] = section.table[k];
+					if (next_key_value.type == TomlValue::Type::Table ||
+					    is_table_array(next_key_value)) {
+						continue;
+					}
 					next_key = find_key_begin(
 						document,
-						section.name,
-						section.entries[k].key);
+						section_name_value,
+						next_key_name);
 					if (next_key) break;
 				}
 			}
 			reconcile_value(
 				document,
-				section.name,
-				entry.key,
-				entry.value,
+				section_name_value,
+				entry_key,
+				serialize_value(entry_value),
 				next_key);
 		}
 	}

@@ -38,6 +38,7 @@ struct TomlValue {
 	bool        b = false; // Bool
 	std::vector<TomlValue> array;
 	std::vector<std::pair<std::string, TomlValue>> table;
+	std::string lexical; // Optional preferred spelling used by the writer.
 
 	// Parser metadata used to enforce TOML's table-definition rules.
 	bool explicit_table = false;
@@ -147,6 +148,9 @@ public:
 	void write(std::string_view key, double             value);
 	void write(std::string_view key, bool               value);
 
+	void set_document(TomlDocument document);
+	const TomlDocument &document() const noexcept { return m_document; }
+
 	template<std::integral T>
 		requires (!std::same_as<std::remove_cv_t<T>, bool>)
 	void write(std::string_view key, T value) {
@@ -169,20 +173,10 @@ public:
 	bool save(const std::filesystem::path &path) const;
 
 private:
-	struct Entry {
-		std::string key;
-		std::string value;
-	};
-
-	struct Section {
-		std::string name;
-		std::vector<Entry> entries;
-	};
-
 	std::string          m_source_document;
-	std::vector<Section> m_sections;
-	std::optional<size_t> m_current_section;
+	TomlDocument         m_document;
+	std::optional<std::string> m_current_section;
 
 	std::string render(std::string document) const;
-	void write_value(std::string_view key, std::string value);
+	void write_value(std::string_view key, TomlValue value);
 };
