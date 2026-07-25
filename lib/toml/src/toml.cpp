@@ -971,15 +971,57 @@ bool TomlReader::get(
 
 // ─── TomlWriter ──────────────────────────────────────────────────────────────
 
+static bool contains_name(
+	const std::vector<std::string> &names,
+	std::string_view name)
+{
+	return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+static void move_entries_before(
+	std::vector<std::pair<std::string, TomlValue>> &entries,
+	const std::vector<std::string> &names,
+	std::string_view anchor)
+{
+	if (names.empty()) return;
+
+	std::vector<std::pair<std::string, TomlValue>> moved;
+	for (auto entry = entries.begin(); entry != entries.end();) {
+		if (contains_name(names, entry->first)) {
+			moved.push_back(std::move(*entry));
+			entry = entries.erase(entry);
+		} else {
+			++entry;
+		}
+	}
+
+	const auto position = std::find_if(
+		entries.begin(),
+		entries.end(),
+		[anchor](const auto &entry) { return entry.first == anchor; });
+	entries.insert(
+		position,
+		std::make_move_iterator(moved.begin()),
+		std::make_move_iterator(moved.end()));
+}
+
 void TomlWriter::section(std::string_view name) {
 	auto *value = m_document.root.find(name);
 	if (!value) {
 		TomlValue table{TomlValue::Type::Table};
 		table.explicit_table = true;
 		m_document.root.insert(std::string(name), std::move(table));
+		if (!contains_name(m_seen_sections, name)) {
+			m_seen_sections.emplace_back(name);
+			m_pending_sections.emplace_back(name);
+		}
 	} else if (value->type != TomlValue::Type::Table) {
 		m_current_section.reset();
 		return;
+	} else if (!contains_name(m_seen_sections, name)) {
+		move_entries_before(m_document.root.table, m_pending_sections, name);
+		m_pending_sections.clear();
+		m_seen_sections.emplace_back(name);
 	}
 	m_current_section = std::string(name);
 }
@@ -1045,12 +1087,40 @@ void TomlWriter::write(std::string_view key, bool value) {
 void TomlWriter::load(const TomlDocument &document) {
 	m_document = document;
 	m_current_section.reset();
+	m_seen_sections.clear();
+	m_pending_sections.clear();
+	m_section_write_order.clear();
+}
+
+TomlWriter::SectionWriteOrder &TomlWriter::write_order_for(
+	std::string_view section)
+{
+	const auto existing = std::find_if(
+		m_section_write_order.begin(),
+		m_section_write_order.end(),
+		[section](const auto &order) { return order.name == section; });
+	if (existing != m_section_write_order.end()) return *existing;
+	m_section_write_order.push_back({std::string(section), {}, {}});
+	return m_section_write_order.back();
 }
 
 void TomlWriter::write_value(std::string_view key, TomlValue value) {
 	if (!m_current_section) return;
 	auto *section_value = m_document.root.find(*m_current_section);
 	if (!section_value || section_value->type != TomlValue::Type::Table) return;
+
+	auto &order = write_order_for(*m_current_section);
+	const bool first_write = !contains_name(order.seen_keys, key);
+	if (first_write) {
+		if (section_value->find(key)) {
+			move_entries_before(section_value->table, order.pending_keys, key);
+			order.pending_keys.clear();
+		} else {
+			order.pending_keys.emplace_back(key);
+		}
+		order.seen_keys.emplace_back(key);
+	}
+
 	if (auto *existing = section_value->find(key)) {
 		value.leading_comments = std::move(existing->leading_comments);
 		value.trailing_comment = std::move(existing->trailing_comment);

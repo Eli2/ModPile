@@ -173,9 +173,19 @@ public:
 	bool save(const std::filesystem::path &path) const;
 
 private:
+	struct SectionWriteOrder {
+		std::string name;
+		std::vector<std::string> seen_keys;
+		std::vector<std::string> pending_keys;
+	};
+
 	TomlDocument         m_document;
 	std::optional<std::string> m_current_section;
+	std::vector<std::string> m_seen_sections;
+	std::vector<std::string> m_pending_sections;
+	std::vector<SectionWriteOrder> m_section_write_order;
 
 	std::string render() const;
 	void write_value(std::string_view key, TomlValue value);
+	SectionWriteOrder &write_order_for(std::string_view section);
 };

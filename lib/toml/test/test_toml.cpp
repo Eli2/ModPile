@@ -391,7 +391,7 @@ TEST_CASE("TOML writer replaces a file from its supplied document", "[toml][writ
 	std::filesystem::remove(path);
 }
 
-TEST_CASE("TOML writer appends missing sections without reordering the document", "[toml][writer]") {
+TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]") {
 	auto reader = read_toml(
 		"[a]\n"
 		"value = 1\n"
@@ -414,15 +414,15 @@ TEST_CASE("TOML writer appends missing sections without reordering the document"
 	      "[a]\n"
 	      "value = 10\n"
 	      "\n"
-	      "[c]\n"
-	      "value = 30\n"
-	      "\n"
 	      "[b]\n"
-	      "value = 20\n");
+	      "value = 20\n"
+	      "\n"
+	      "[c]\n"
+	      "value = 30\n");
 }
 
 TEST_CASE("TOML writer inserts missing values without reordering existing values", "[toml][writer]") {
-	SECTION("a missing value is appended after existing ordered values") {
+	SECTION("a missing value is inserted before the next modeled value") {
 		auto reader = read_toml("[values]\nvalA = 1\nvalC = 3\n");
 		TomlWriter writer;
 		writer.load(reader.document());
@@ -437,8 +437,8 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 		CHECK(output.str() ==
 		      "[values]\n"
 		      "valA = 10\n"
-		      "valC = 30\n"
-		      "valB = 20\n");
+		      "valB = 20\n"
+		      "valC = 30\n");
 	}
 
 	SECTION("manual ordering is preserved and a trailing value stays trailing") {
@@ -495,17 +495,17 @@ TEST_CASE("TOML writer keeps structured comments attached while updating", "[tom
 	      "[a] # inline section a\n"
 	      "# value a\n"
 	      "valA = 10 # inline value a\n"
+	      "valB = 20\n"
 	      "# value c\n"
 	      "valC = 30 # inline value c\n"
-	      "valB = 20\n"
+	      "\n"
+	      "[b]\n"
+	      "value = 2\n"
 	      "\n"
 	      "# section c line 1\n"
 	      "# section c line 2\n"
 	      "[c] # inline section c\n"
-	      "value = 300 # inline value in c\n"
-	      "\n"
-	      "[b]\n"
-	      "value = 2\n");
+	      "value = 300 # inline value in c\n");
 }
 
 TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {
