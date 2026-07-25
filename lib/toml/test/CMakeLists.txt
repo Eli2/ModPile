@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Eli2
 
 add_executable(ModPileTomlTest
+	test_ordered_map.cpp
 	test_toml.cpp
 )
 target_link_libraries(ModPileTomlTest PRIVATE

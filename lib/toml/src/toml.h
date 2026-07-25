@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "ordered_map.h"
+
 struct TomlComment {
 	std::string text; // Text after '#', excluding the line ending.
 	size_t offset = 0;
@@ -56,7 +58,7 @@ struct TomlValue {
 	double      f = 0; // Float
 	bool        b = false; // Bool
 	std::vector<TomlValue> array;
-	std::vector<std::pair<std::string, TomlValue>> table;
+	OrderedMap<std::string, TomlValue> table;
 	TomlValueFormat format = TomlValueFormat::Plain;
 	size_t format_width = 0; // Minimum digits for non-decimal integers.
 	std::vector<TomlComment> leading_comments;
@@ -75,22 +77,17 @@ struct TomlValue {
 };
 
 inline TomlValue *TomlValue::find(std::string_view key) noexcept {
-	for (auto &[candidate, value] : table) {
-		if (candidate == key) return &value;
-	}
-	return nullptr;
+	const auto value = table.find(key);
+	return value == table.end() ? nullptr : &value->second;
 }
 
 inline const TomlValue *TomlValue::find(std::string_view key) const noexcept {
-	for (const auto &[candidate, value] : table) {
-		if (candidate == key) return &value;
-	}
-	return nullptr;
+	const auto value = table.find(key);
+	return value == table.end() ? nullptr : &value->second;
 }
 
 inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
-	table.emplace_back(std::move(key), std::move(value));
-	return table.back().second;
+	return table.try_emplace(std::move(key), std::move(value)).first->second;
 }
 
 struct TomlDocument {

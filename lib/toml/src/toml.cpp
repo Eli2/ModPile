@@ -998,30 +998,38 @@ static bool contains_name(
 }
 
 static void move_entries_before(
-	std::vector<std::pair<std::string, TomlValue>> &entries,
+	OrderedMap<std::string, TomlValue> &entries,
 	const std::vector<std::string> &names,
 	std::string_view anchor)
 {
 	if (names.empty()) return;
 
-	std::vector<std::pair<std::string, TomlValue>> moved;
-	for (auto entry = entries.begin(); entry != entries.end();) {
-		if (contains_name(names, entry->first)) {
-			moved.push_back(std::move(*entry));
-			entry = entries.erase(entry);
-		} else {
-			++entry;
+	OrderedMap<std::string, TomlValue> reordered;
+	reordered.reserve(entries.size());
+	bool inserted = false;
+	for (auto &[key, value] : entries) {
+		if (!inserted && key == anchor) {
+			for (const auto &name : names) {
+				const auto pending = entries.find(name);
+				if (pending != entries.end()) {
+					reordered.try_emplace(pending->first, std::move(pending->second));
+				}
+			}
+			inserted = true;
+		}
+		if (!contains_name(names, key)) {
+			reordered.try_emplace(key, std::move(value));
 		}
 	}
-
-	const auto position = std::find_if(
-		entries.begin(),
-		entries.end(),
-		[anchor](const auto &entry) { return entry.first == anchor; });
-	entries.insert(
-		position,
-		std::make_move_iterator(moved.begin()),
-		std::make_move_iterator(moved.end()));
+	if (!inserted) {
+		for (const auto &name : names) {
+			const auto pending = entries.find(name);
+			if (pending != entries.end()) {
+				reordered.try_emplace(pending->first, std::move(pending->second));
+			}
+		}
+	}
+	entries = std::move(reordered);
 }
 
 void TomlWriter::section(std::string_view name) {
@@ -1262,11 +1270,13 @@ static void append_trailing_comment(
 
 static std::string serialize_inline_table(const TomlValue &value) {
 	std::string output = "{";
-	for (size_t i = 0; i < value.table.size(); ++i) {
-		if (i > 0) output += ", ";
-		output += serialize_key(value.table[i].first);
+	bool first = true;
+	for (const auto &[key, child] : value.table) {
+		if (!first) output += ", ";
+		first = false;
+		output += serialize_key(key);
 		output += " = ";
-		output += serialize_value(value.table[i].second);
+		output += serialize_value(child);
 	}
 	output += '}';
 	return output;

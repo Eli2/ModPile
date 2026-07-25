@@ -38,5 +38,6 @@ For a quick smoke run while developing:
 ```
 
 Compare results only from the same build type and machine. The wide-table and
-many-section sizes intentionally expose nonlinear behavior in ordered
-`TomlValue::find`, parser insertion, and repeated writer updates.
+many-section sizes guard the scaling of `OrderedMap` lookup, parser insertion,
+and repeated writer updates while serialization continues to exercise ordered
+vector iteration.

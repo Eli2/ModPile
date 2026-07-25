@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -140,19 +141,22 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 
 	const auto &document = reader.document();
 	REQUIRE(document.root.table.size() == 3);
-	CHECK(document.root.table[0].first == "root");
-	CHECK(document.root.table[1].first == "z");
-	CHECK(document.root.table[2].first == "a");
-	REQUIRE(document.root.table[1].second.table.size() == 2);
-	CHECK(document.root.table[1].second.table[0].first == "first");
-	CHECK(document.root.table[1].second.table[1].first == "second");
+	const auto root_entry = document.root.table.begin();
+	const auto z_entry = std::next(root_entry);
+	const auto a_entry = std::next(z_entry);
+	CHECK(root_entry->first == "root");
+	CHECK(z_entry->first == "z");
+	CHECK(a_entry->first == "a");
+	REQUIRE(z_entry->second.table.size() == 2);
+	CHECK(z_entry->second.table.begin()->first == "first");
+	CHECK(std::next(z_entry->second.table.begin())->first == "second");
 
-	const auto &root = document.root.table[0].second;
+	const auto &root = root_entry->second;
 	REQUIRE(root.leading_comments.size() == 1);
 	CHECK(root.leading_comments[0].text == " document comment");
 	REQUIRE(root.trailing_comment);
 	CHECK(root.trailing_comment->text == " trailing root comment");
-	const auto &section_a = document.root.table[2].second;
+	const auto &section_a = a_entry->second;
 	REQUIRE(section_a.leading_comments.size() == 1);
 	CHECK(section_a.leading_comments[0].text == " section comment");
 	CHECK(root.leading_comments[0].line == 1);
@@ -315,8 +319,8 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 
 	TomlWriter writer;
 	writer.load(document);
-	REQUIRE(writer.document().root.table[0].first == "title");
-	REQUIRE(writer.document().root.table[1].first == "values");
+	REQUIRE(writer.document().root.table.begin()->first == "title");
+	REQUIRE(std::next(writer.document().root.table.begin())->first == "values");
 
 	std::ostringstream output;
 	REQUIRE(writer.save(output));
