@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #include "config.h"
 #include "log.h"
-#include "util/toml.h"
+#include "toml.h"
 
 #include <algorithm>
 #include <filesystem>

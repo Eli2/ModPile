@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include "../src/util/toml.h"
+#include "toml.h"
 
 namespace {
 

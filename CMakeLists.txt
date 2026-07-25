@@ -210,6 +210,7 @@ else()
 endif()
 
 add_subdirectory(extern)
+add_subdirectory(lib/toml/src)
 
 # Main
 
@@ -282,8 +283,6 @@ add_executable(ModPile
 	src/util/xmp_util.cpp
 	src/util/xml_util.h
 	src/util/xml_util.cpp
-	src/util/toml.h
-	src/util/toml.cpp
 	src/util/thread_safe_queue.h
 
 	src/blocking_queue.h
@@ -390,6 +389,7 @@ target_link_libraries(ModPile PRIVATE
 	glad::glad
 	kissfft::kissfft-float
 	glm::glm
+	ModPile::Toml
 )
 if(MODPILE_USE_SYSTEM_ZSTD)
 	target_link_libraries(ModPile PRIVATE zstd::libzstd_shared)
@@ -419,6 +419,10 @@ else()
 	FetchContent_MakeAvailable(Catch2)
 endif()
 
+include(CTest)
+include(Catch)
+add_subdirectory(lib/toml/test)
+
 add_executable(ModPileTest
 	${hash_util_srcs}
 	src/db.h
@@ -441,8 +445,6 @@ add_executable(ModPileTest
 	src/util/sqlite_util.cpp
 	src/util/xml_util.h
 	src/util/xml_util.cpp
-	src/util/toml.h
-	src/util/toml.cpp
 	src/util/xmp_util.h
 	src/util/xmp_util.cpp
 	src/task_util.h
@@ -486,7 +488,6 @@ add_executable(ModPileTest
 	test/test_task_util.cpp
 	test/test_thread_safe_queue.cpp
 	test/test_global.cpp
-	test/test_toml.cpp
 	test/test_xml_util.cpp
 )
 target_compile_features(ModPileTest PRIVATE
@@ -501,6 +502,7 @@ target_link_libraries(ModPileTest PRIVATE
 	SQLite::SQLite3
 	ebur128
 	atomic
+	ModPile::Toml
 )
 if(MODPILE_USE_SYSTEM_ZSTD)
 	target_link_libraries(ModPileTest PRIVATE zstd::libzstd_shared)
@@ -513,6 +515,4 @@ else()
 	target_link_libraries(ModPileTest PRIVATE libxmp::xmp_static)
 endif()
 
-include(CTest)
-include(Catch)
 catch_discover_tests(ModPileTest)
