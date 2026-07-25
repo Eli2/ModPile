@@ -651,6 +651,20 @@ private:
 			}
 			value = TomlValue{TomlValue::Type::Integer};
 			value.i = static_cast<int64_t>(parsed);
+			value.format_width = digits.size();
+			if (base == 16) {
+				const bool uppercase = std::any_of(
+					body.begin() + 2,
+					body.end(),
+					[](unsigned char c) { return c >= 'A' && c <= 'F'; });
+				value.format = uppercase
+					? TomlValueFormat::IntegerHexUpper
+					: TomlValueFormat::IntegerHexLower;
+			} else {
+				value.format = base == 8
+					? TomlValueFormat::IntegerOctal
+					: TomlValueFormat::IntegerBinary;
+			}
 			return true;
 		}
 
@@ -671,6 +685,11 @@ private:
 			}
 			value = TomlValue{TomlValue::Type::Float};
 			value.f = parsed;
+			if (body.find('E') != std::string_view::npos) {
+				value.format = TomlValueFormat::FloatScientificUpper;
+			} else if (body.find('e') != std::string_view::npos) {
+				value.format = TomlValueFormat::FloatScientificLower;
+			}
 			return true;
 		}
 
@@ -1067,14 +1086,15 @@ void TomlWriter::write(std::string_view key, int64_t value) {
 void TomlWriter::write_hex(std::string_view key, int64_t value) {
 	TomlValue toml_value{TomlValue::Type::Integer};
 	toml_value.i = value;
-	toml_value.lexical = std::format("0x{:04x}", static_cast<uint64_t>(value));
+	toml_value.format = TomlValueFormat::IntegerHexLower;
+	toml_value.format_width = 4;
 	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, double value) {
 	TomlValue toml_value{TomlValue::Type::Float};
 	toml_value.f = value;
-	toml_value.lexical = std::format("{:.7g}", value);
+	toml_value.format = TomlValueFormat::FloatCompact;
 	write_value(key, std::move(toml_value));
 }
 
@@ -1139,17 +1159,79 @@ static std::string serialize_key(std::string_view key) {
 	return escape_string(key);
 }
 
-static std::string serialize_float(double value) {
+static std::string serialize_integer(const TomlValue &value) {
+	int base = 10;
+	std::string_view prefix;
+	bool uppercase = false;
+	switch (value.format) {
+		case TomlValueFormat::IntegerHexLower:
+			base = 16;
+			prefix = "0x";
+			break;
+		case TomlValueFormat::IntegerHexUpper:
+			base = 16;
+			prefix = "0x";
+			uppercase = true;
+			break;
+		case TomlValueFormat::IntegerOctal:
+			base = 8;
+			prefix = "0o";
+			break;
+		case TomlValueFormat::IntegerBinary:
+			base = 2;
+			prefix = "0b";
+			break;
+		default:
+			return std::to_string(value.i);
+	}
+
+	char buffer[65];
+	const auto result = std::to_chars(
+		std::begin(buffer),
+		std::end(buffer),
+		static_cast<uint64_t>(value.i),
+		base);
+	if (result.ec != std::errc{}) return std::to_string(value.i);
+	std::string digits(buffer, result.ptr);
+	if (digits.size() < value.format_width) {
+		digits.insert(0, value.format_width - digits.size(), '0');
+	}
+	if (uppercase) {
+		std::transform(
+			digits.begin(),
+			digits.end(),
+			digits.begin(),
+			[](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+	}
+	return std::string(prefix) + digits;
+}
+
+static std::string serialize_float(const TomlValue &toml_value) {
+	const double value = toml_value.f;
 	if (std::isnan(value)) return "nan";
 	if (std::isinf(value)) return std::signbit(value) ? "-inf" : "inf";
+	if (toml_value.format == TomlValueFormat::FloatCompact) {
+		auto output = std::format("{:.7g}", value);
+		if (output.find_first_of(".eE") == std::string::npos) output += ".0";
+		return output;
+	}
+
 	char buffer[64];
+	const bool scientific =
+		toml_value.format == TomlValueFormat::FloatScientificLower ||
+		toml_value.format == TomlValueFormat::FloatScientificUpper;
 	const auto result = std::to_chars(
 		std::begin(buffer),
 		std::end(buffer),
 		value,
-		std::chars_format::general);
+		scientific ? std::chars_format::scientific : std::chars_format::general);
 	if (result.ec != std::errc{}) return "0.0";
 	std::string output(buffer, result.ptr);
+	if (toml_value.format == TomlValueFormat::FloatScientificUpper) {
+		if (const auto exponent = output.find('e'); exponent != std::string::npos) {
+			output[exponent] = 'E';
+		}
+	}
 	if (output.find_first_of(".eE") == std::string::npos) output += ".0";
 	return output;
 }
@@ -1191,14 +1273,13 @@ static std::string serialize_inline_table(const TomlValue &value) {
 }
 
 static std::string serialize_value(const TomlValue &value) {
-	if (!value.lexical.empty()) return value.lexical;
 	switch (value.type) {
 		case TomlValue::Type::String:
 			return escape_string(value.str);
 		case TomlValue::Type::Integer:
-			return std::to_string(value.i);
+			return serialize_integer(value);
 		case TomlValue::Type::Float:
-			return serialize_float(value.f);
+			return serialize_float(value);
 		case TomlValue::Type::Bool:
 			return value.b ? "true" : "false";
 		case TomlValue::Type::DateTime:

@@ -23,6 +23,17 @@ struct TomlComment {
 	bool trailing = false;
 };
 
+enum class TomlValueFormat {
+	Plain,
+	IntegerHexLower,
+	IntegerHexUpper,
+	IntegerOctal,
+	IntegerBinary,
+	FloatScientificLower,
+	FloatScientificUpper,
+	FloatCompact
+};
+
 struct TomlValue {
 	enum class Type {
 		String,
@@ -46,7 +57,8 @@ struct TomlValue {
 	bool        b = false; // Bool
 	std::vector<TomlValue> array;
 	std::vector<std::pair<std::string, TomlValue>> table;
-	std::string lexical; // Optional preferred spelling used by the writer.
+	TomlValueFormat format = TomlValueFormat::Plain;
+	size_t format_width = 0; // Minimum digits for non-decimal integers.
 	std::vector<TomlComment> leading_comments;
 	std::optional<TomlComment> trailing_comment;
 	std::vector<TomlComment> dangling_comments;

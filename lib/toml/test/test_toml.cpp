@@ -28,6 +28,8 @@ TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
 		integer = -42
 		hex_lower = 0x2a
 		hex_upper = 0xCAFE
+		octal = 0o52
+		binary = 0b101010
 		fraction = -12.5
 		exponent = 5e+2
 		enabled = true
@@ -38,10 +40,29 @@ TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
 	CHECK(reader.get_integer("values", "integer") == -42);
 	CHECK(reader.get_integer("values", "hex_lower") == 42);
 	CHECK(reader.get_integer("values", "hex_upper") == 0xCAFE);
+	CHECK(reader.get_integer("values", "octal") == 42);
+	CHECK(reader.get_integer("values", "binary") == 42);
 	CHECK(reader.get_float("values", "fraction") == -12.5);
 	CHECK(reader.get_float("values", "exponent") == 500.0);
 	CHECK(reader.get_bool("values", "enabled") == true);
 	CHECK(reader.get_bool("values", "disabled") == false);
+
+	const auto *values = reader.document().root.find("values");
+	REQUIRE(values);
+	REQUIRE(values->find("integer"));
+	REQUIRE(values->find("hex_lower"));
+	REQUIRE(values->find("hex_upper"));
+	REQUIRE(values->find("octal"));
+	REQUIRE(values->find("binary"));
+	REQUIRE(values->find("fraction"));
+	REQUIRE(values->find("exponent"));
+	CHECK(values->find("integer")->format == TomlValueFormat::Plain);
+	CHECK(values->find("hex_lower")->format == TomlValueFormat::IntegerHexLower);
+	CHECK(values->find("hex_upper")->format == TomlValueFormat::IntegerHexUpper);
+	CHECK(values->find("octal")->format == TomlValueFormat::IntegerOctal);
+	CHECK(values->find("binary")->format == TomlValueFormat::IntegerBinary);
+	CHECK(values->find("fraction")->format == TomlValueFormat::Plain);
+	CHECK(values->find("exponent")->format == TomlValueFormat::FloatScientificLower);
 }
 
 TEST_CASE("TOML reader accepts integers where callers request floats", "[toml][reader]") {
@@ -235,6 +256,34 @@ TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writ
 	      "\n"
 	      "[second]\n"
 	      "disabled = false\n");
+}
+
+TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]") {
+	auto reader = read_toml(
+		"[numbers]\n"
+		"decimal = 42\n"
+		"hex_lower = 0x002a\n"
+		"hex_upper = 0xCAFE\n"
+		"octal = 0o52\n"
+		"binary = 0b101010\n"
+		"float_plain = 12.5\n"
+		"float_lower = 5e+2\n"
+		"float_upper = -2E-2\n");
+	TomlWriter writer;
+	writer.load(reader.document());
+
+	std::ostringstream output;
+	REQUIRE(writer.save(output));
+	CHECK(output.str() ==
+	      "[numbers]\n"
+	      "decimal = 42\n"
+	      "hex_lower = 0x002a\n"
+	      "hex_upper = 0xCAFE\n"
+	      "octal = 0o52\n"
+	      "binary = 0b101010\n"
+	      "float_plain = 12.5\n"
+	      "float_lower = 5e+02\n"
+	      "float_upper = -2E-02\n");
 }
 
 TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {
