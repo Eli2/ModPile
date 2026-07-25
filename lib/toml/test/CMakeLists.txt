@@ -11,6 +11,14 @@ target_link_libraries(ModPileTomlTest PRIVATE
 
 catch_discover_tests(ModPileTomlTest)
 
+add_executable(ModPileTomlBenchmark
+	benchmark_toml.cpp
+)
+target_link_libraries(ModPileTomlBenchmark PRIVATE
+	ModPile::Toml
+	Catch2::Catch2WithMain
+)
+
 add_executable(ModPileTomlTestDecoder
 	toml_test_decoder.cpp
 )
