@@ -137,6 +137,12 @@ TEST_CASE("TOML parser scaling", "[!benchmark][toml][parse]") {
 	};
 }
 
+TEST_CASE("profile one large TOML parse without benchmark calibration",
+	"[!benchmark][toml][cachegrind-parse]") {
+	const auto document = make_wide_document(50'000);
+	REQUIRE(parse_once(document) != 0);
+}
+
 TEST_CASE("TOML ordered document lookup scaling", "[!benchmark][toml][lookup]") {
 	const auto document = parse_document(make_wide_document(10'000));
 	const auto *values = document.root.find("values");

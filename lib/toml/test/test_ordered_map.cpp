@@ -24,6 +24,9 @@ TEST_CASE("OrderedMap provides map lookup with insertion-order iteration", "[tom
 	REQUIRE(values.size() == 2);
 	CHECK(values.begin()->first == "first");
 	CHECK(std::next(values.begin())->first == "second");
+	auto copied_iterator = values.begin();
+	copied_iterator = std::next(values.begin());
+	CHECK(copied_iterator->first == "second");
 
 	const std::string_view second_key = "second";
 	CHECK(values.contains(second_key));

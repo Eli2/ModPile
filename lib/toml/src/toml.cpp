@@ -57,7 +57,11 @@ bool valid_utf8(std::string_view text) {
 }
 
 bool is_bare_key_char(char c) {
-	return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-';
+	return (c >= 'a' && c <= 'z') ||
+	       (c >= 'A' && c <= 'Z') ||
+	       (c >= '0' && c <= '9') ||
+	       c == '_' ||
+	       c == '-';
 }
 
 bool is_digit_for_base(char c, int base) {
@@ -211,13 +215,29 @@ private:
 	}
 
 	bool parse_assignment() {
+		skip_spaces();
+		std::string key;
+		if (!parse_key_part(key)) return false;
+		skip_spaces();
+
 		std::vector<std::string> path;
-		if (!parse_key_path(path, '=')) return false;
+		const bool direct = peek() == '=';
+		if (!direct) {
+			path.push_back(std::move(key));
+			if (!parse_key_path_tail(path, '=')) return false;
+		}
 		if (peek() != '=') return false;
 		advance();
 		skip_spaces();
 		TomlValue value;
 		if (!parse_value(value)) return false;
+		if (direct) {
+			auto [entry, inserted] =
+				m_current->table.try_emplace(std::move(key), std::move(value));
+			if (!inserted) return false;
+			m_statement_value = &entry->second;
+			return true;
+		}
 		return insert_value(
 			*m_current,
 			path,
@@ -228,23 +248,35 @@ private:
 
 	bool parse_key_path(std::vector<std::string> &path, char terminator) {
 		skip_spaces();
-		while (true) {
+		std::string part;
+		if (!parse_key_part(part)) return false;
+		path.push_back(std::move(part));
+		skip_spaces();
+		return parse_key_path_tail(path, terminator);
+	}
+
+	bool parse_key_path_tail(std::vector<std::string> &path, char terminator) {
+		if (peek() == terminator) return true;
+		while (peek() == '.') {
+			advance();
+			skip_spaces();
 			std::string part;
 			if (!parse_key_part(part)) return false;
 			path.push_back(std::move(part));
 			skip_spaces();
 			if (peek() == terminator) return true;
-			if (peek() != '.') return false;
-			advance();
-			skip_spaces();
 		}
+		return false;
 	}
 
 	bool parse_key_part(std::string &part) {
 		if (peek() == '"') return parse_basic_string(part, false);
 		if (peek() == '\'') return parse_literal_string(part, false);
 		const auto begin = m_pos;
-		while (is_bare_key_char(peek())) advance();
+		while (is_bare_key_char(peek())) {
+			++m_pos;
+			++m_column;
+		}
 		if (m_pos == begin) return false;
 		part.assign(m_input.substr(begin, m_pos - begin));
 		return true;
@@ -323,7 +355,8 @@ private:
 			const auto c = static_cast<unsigned char>(peek());
 			if ((c < 0x20 && c != '\t') || c == 0x7f) return false;
 			output.push_back(peek());
-			advance();
+			++m_pos;
+			++m_column;
 		}
 		return false;
 	}
@@ -521,7 +554,8 @@ private:
 		const auto begin = m_pos;
 		while (!eof() && peek() != ',' && peek() != ']' && peek() != '}' &&
 		       peek() != '#' && !newline_here()) {
-			advance();
+			++m_pos;
+			++m_column;
 		}
 		auto token = m_input.substr(begin, m_pos - begin);
 		while (!token.empty() && (token.back() == ' ' || token.back() == '\t')) {
@@ -861,9 +895,10 @@ private:
 			}
 			cursor = child;
 		}
-		if (cursor->find(path.back())) return false;
-		auto &new_value = cursor->insert(path.back(), std::move(value));
-		if (inserted) *inserted = &new_value;
+		auto [entry, was_inserted] =
+			cursor->table.try_emplace(path.back(), std::move(value));
+		if (!was_inserted) return false;
+		if (inserted) *inserted = &entry->second;
 		return true;
 	}
 };

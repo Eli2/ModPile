@@ -37,6 +37,18 @@ For a quick smoke run while developing:
   --benchmark-no-analysis
 ```
 
+Profile one 50,000-key parse without Catch2 benchmark calibration:
+
+```bash
+valgrind --tool=cachegrind --cache-sim=yes --branch-sim=yes \
+  --cachegrind-out-file=/tmp/modpile-toml.cachegrind \
+  ./build-perf/lib/toml/test/ModPileTomlBenchmark '[cachegrind-parse]'
+
+cg_annotate --auto=yes \
+  --show=Ir,D1mr,D1mw,DLmr,DLmw,Bc,Bcm \
+  --sort=Ir /tmp/modpile-toml.cachegrind
+```
+
 Compare results only from the same build type and machine. The wide-table and
 many-section sizes guard the scaling of `OrderedMap` lookup, parser insertion,
 and repeated writer updates while serialization continues to exercise ordered

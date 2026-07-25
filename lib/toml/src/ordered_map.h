@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -23,7 +25,17 @@ struct OrderedMapHash<std::string> {
 	using is_transparent = void;
 
 	size_t operator()(std::string_view value) const noexcept {
-		return std::hash<std::string_view>{}(value);
+		size_t hash = sizeof(size_t) == 8
+			? static_cast<size_t>(14695981039346656037ull)
+			: static_cast<size_t>(2166136261u);
+		const size_t prime = sizeof(size_t) == 8
+			? static_cast<size_t>(1099511628211ull)
+			: static_cast<size_t>(16777619u);
+		for (const unsigned char byte : value) {
+			hash ^= byte;
+			hash *= prime;
+		}
+		return hash;
 	}
 };
 
@@ -39,16 +51,111 @@ public:
 	using value_type = std::pair<const Key, T>;
 	using size_type = size_t;
 	using difference_type = std::ptrdiff_t;
-	using reference = value_type &;
-	using const_reference = const value_type &;
 
 private:
-	using Storage = std::vector<value_type>;
+	using StorageValue = std::pair<Key, T>;
+	using Storage = std::vector<StorageValue>;
 	using Index = std::unordered_map<Key, size_type, Hash, KeyEqual>;
 
 public:
-	using iterator = typename Storage::iterator;
-	using const_iterator = typename Storage::const_iterator;
+	template<bool IsConst>
+	struct EntryReference {
+		using MappedReference = std::conditional_t<IsConst, const T &, T &>;
+
+		EntryReference(const Key &key, MappedReference value)
+			: first(key), second(value) {}
+
+		const Key &first;
+		MappedReference second;
+	};
+
+	template<bool IsConst>
+	class BasicIterator {
+	private:
+		using BaseIterator = std::conditional_t<
+			IsConst,
+			typename Storage::const_iterator,
+			typename Storage::iterator>;
+
+	public:
+		using iterator_category = std::bidirectional_iterator_tag;
+		using value_type = OrderedMap::value_type;
+		using difference_type = OrderedMap::difference_type;
+		using reference = EntryReference<IsConst> &;
+		using pointer = EntryReference<IsConst> *;
+
+		BasicIterator() = default;
+		BasicIterator(const BasicIterator &other) : m_current(other.m_current) {}
+		BasicIterator(BasicIterator &&other) noexcept : m_current(other.m_current) {}
+
+		BasicIterator &operator=(const BasicIterator &other) {
+			m_current = other.m_current;
+			m_reference.reset();
+			return *this;
+		}
+
+		BasicIterator &operator=(BasicIterator &&other) noexcept {
+			m_current = other.m_current;
+			m_reference.reset();
+			return *this;
+		}
+
+		template<bool Enabled = IsConst>
+			requires Enabled
+		BasicIterator(const BasicIterator<false> &other)
+			: m_current(other.m_current) {}
+
+		reference operator*() const {
+			m_reference.emplace(m_current->first, m_current->second);
+			return *m_reference;
+		}
+
+		pointer operator->() const {
+			return &operator*();
+		}
+
+		BasicIterator &operator++() {
+			++m_current;
+			return *this;
+		}
+
+		BasicIterator operator++(int) {
+			auto previous = *this;
+			++*this;
+			return previous;
+		}
+
+		BasicIterator &operator--() {
+			--m_current;
+			return *this;
+		}
+
+		BasicIterator operator--(int) {
+			auto previous = *this;
+			--*this;
+			return previous;
+		}
+
+		template<bool OtherConst>
+		bool operator==(const BasicIterator<OtherConst> &other) const {
+			return m_current == other.m_current;
+		}
+
+	private:
+		explicit BasicIterator(BaseIterator current) : m_current(current) {}
+
+		BaseIterator m_current;
+		mutable std::optional<EntryReference<IsConst>> m_reference;
+
+		friend class OrderedMap;
+		template<bool>
+		friend class BasicIterator;
+	};
+
+	using iterator = BasicIterator<false>;
+	using const_iterator = BasicIterator<true>;
+	using reference = EntryReference<false>;
+	using const_reference = EntryReference<true>;
 
 	OrderedMap() = default;
 	OrderedMap(const OrderedMap &other)
@@ -67,12 +174,12 @@ public:
 
 	OrderedMap &operator=(OrderedMap &&) noexcept = default;
 
-	iterator begin() noexcept { return m_entries.begin(); }
-	const_iterator begin() const noexcept { return m_entries.begin(); }
-	const_iterator cbegin() const noexcept { return m_entries.cbegin(); }
-	iterator end() noexcept { return m_entries.end(); }
-	const_iterator end() const noexcept { return m_entries.end(); }
-	const_iterator cend() const noexcept { return m_entries.cend(); }
+	iterator begin() noexcept { return iterator(m_entries.begin()); }
+	const_iterator begin() const noexcept { return const_iterator(m_entries.begin()); }
+	const_iterator cbegin() const noexcept { return const_iterator(m_entries.cbegin()); }
+	iterator end() noexcept { return iterator(m_entries.end()); }
+	const_iterator end() const noexcept { return const_iterator(m_entries.end()); }
+	const_iterator cend() const noexcept { return const_iterator(m_entries.cend()); }
 
 	[[nodiscard]] bool empty() const noexcept { return m_entries.empty(); }
 	size_type size() const noexcept { return m_entries.size(); }
@@ -89,20 +196,20 @@ public:
 
 	template<typename K>
 	iterator find(const K &key) {
-		if (!m_index) return m_entries.end();
+		if (!m_index) return end();
 		const auto found = m_index->find(key);
 		return found == m_index->end()
-			? m_entries.end()
-			: m_entries.begin() + static_cast<difference_type>(found->second);
+			? end()
+			: iterator(m_entries.begin() + static_cast<difference_type>(found->second));
 	}
 
 	template<typename K>
 	const_iterator find(const K &key) const {
-		if (!m_index) return m_entries.end();
+		if (!m_index) return end();
 		const auto found = m_index->find(key);
 		return found == m_index->end()
-			? m_entries.end()
-			: m_entries.begin() + static_cast<difference_type>(found->second);
+			? end()
+			: const_iterator(m_entries.begin() + static_cast<difference_type>(found->second));
 	}
 
 	template<typename K>
@@ -139,22 +246,40 @@ public:
 
 	template<typename K, typename... Args>
 	std::pair<iterator, bool> try_emplace(K &&key, Args &&...args) {
-		if (const auto existing = find(key); existing != end()) {
-			return {existing, false};
+		Key stored_key(std::forward<K>(key));
+		const auto position = m_entries.size();
+		if (position == m_entries.capacity()) {
+			if (const auto existing = find(stored_key); existing != end()) {
+				return {existing, false};
+			}
+			const auto current_capacity = m_entries.capacity();
+			const auto capacity = std::max<size_type>(
+				size_type{8},
+				current_capacity > m_entries.max_size() / 2
+					? m_entries.max_size()
+					: current_capacity * 2);
+			m_entries.reserve(capacity);
+			index().reserve(capacity);
+		}
+		auto [indexed, inserted] = index().try_emplace(stored_key, position);
+		if (!inserted) {
+			return {
+				iterator(m_entries.begin() + static_cast<difference_type>(indexed->second)),
+				false};
 		}
 
-		const auto position = m_entries.size();
-		m_entries.emplace_back(
-			std::piecewise_construct,
-			std::forward_as_tuple(std::forward<K>(key)),
-			std::forward_as_tuple(std::forward<Args>(args)...));
 		try {
-			index().emplace(m_entries.back().first, position);
+			m_entries.emplace_back(
+				std::piecewise_construct,
+				std::forward_as_tuple(std::move(stored_key)),
+				std::forward_as_tuple(std::forward<Args>(args)...));
 		} catch (...) {
-			m_entries.pop_back();
+			m_index->erase(indexed);
 			throw;
 		}
-		return {m_entries.begin() + static_cast<difference_type>(position), true};
+		return {
+			iterator(m_entries.begin() + static_cast<difference_type>(position)),
+			true};
 	}
 
 	template<typename K, typename... Args>
@@ -186,19 +311,21 @@ public:
 	}
 
 	iterator erase(const_iterator position) {
-		const auto removed = static_cast<size_type>(position - cbegin());
+		const auto removed = static_cast<size_type>(
+			position.m_current - m_entries.cbegin());
 		if (removed >= size()) return end();
 
 		Storage replacement;
 		replacement.reserve(m_entries.size() - 1);
 		for (size_type i = 0; i < m_entries.size(); ++i) {
 			if (i == removed) continue;
-			replacement.emplace_back(m_entries[i].first, std::move(m_entries[i].second));
+			replacement.push_back(std::move(m_entries[i]));
 		}
 		m_entries = std::move(replacement);
 		rebuild_index();
-		return m_entries.begin() +
-			static_cast<difference_type>(std::min(removed, m_entries.size()));
+		return iterator(
+			m_entries.begin() +
+			static_cast<difference_type>(std::min(removed, m_entries.size())));
 	}
 
 	template<typename K>
