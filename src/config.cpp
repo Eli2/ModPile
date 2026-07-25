@@ -94,8 +94,6 @@ void config_save(AppState &app) {
 	}
 
 	TomlWriter w;
-	// Preserve comments, formatting, ordering, and settings unknown to this build.
-	w.load(g_configFile);
 
 	w.section("database");
 	w.write("path", app.config.database.path.string());

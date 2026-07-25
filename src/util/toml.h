@@ -112,8 +112,20 @@ public:
 	bool save(const std::filesystem::path &path) const;
 
 private:
-	std::string m_buf;
-	std::string m_section;
+	struct Entry {
+		std::string key;
+		std::string value;
+	};
 
+	struct Section {
+		std::string name;
+		std::vector<Entry> entries;
+	};
+
+	std::string          m_source_document;
+	std::vector<Section> m_sections;
+	std::optional<size_t> m_current_section;
+
+	std::string render(std::string document) const;
 	void write_value(std::string_view key, std::string value);
 };

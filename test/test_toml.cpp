@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -183,7 +185,7 @@ TEST_CASE("TOML reader replaces its state on a subsequent load", "[toml][reader]
 	CHECK(reader.get_integer("section", "new") == 2);
 }
 
-TEST_CASE("TOML writer serializes supported values in call order", "[toml][writer]") {
+TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writer]") {
 	TomlWriter writer;
 	writer.section("first");
 	writer.write("text", std::string_view("hello"));
@@ -268,6 +270,164 @@ TEST_CASE("TOML writer preserves CRLF and appends missing keys", "[toml][writer]
 	      "\r\n"
 	      "[other]\r\n"
 	      "value = true\r\n");
+}
+
+TEST_CASE("TOML writer keeps the requested data separate from its source document", "[toml][writer]") {
+	std::istringstream input("[player]\ngain = 1.0\n");
+	TomlWriter writer;
+	REQUIRE(writer.load(input));
+
+	writer.section("player");
+	writer.write("gain", 0.75);
+	writer.write("gain", 0.5);
+
+	std::ostringstream first;
+	std::ostringstream second;
+	REQUIRE(writer.save(first));
+	REQUIRE(writer.save(second));
+	CHECK(first.str() == "[player]\ngain = 0.5\n");
+	CHECK(second.str() == first.str());
+}
+
+TEST_CASE("TOML writer reconciles the file that exists when it is saved", "[toml][writer]") {
+	const auto path = std::filesystem::temp_directory_path() / "modpile_test_toml_writer.toml";
+	{
+		std::ofstream file(path, std::ios::binary);
+		REQUIRE(file);
+		file << "# changed after the writer was built\n[player]\ngain = 1.0\n";
+	}
+
+	TomlWriter writer;
+	writer.section("player");
+	writer.write("gain", 0.25);
+	REQUIRE(writer.save(path));
+
+	std::ifstream file(path, std::ios::binary);
+	REQUIRE(file);
+	std::ostringstream contents;
+	contents << file.rdbuf();
+	CHECK(contents.str() ==
+	      "# changed after the writer was built\n"
+	      "[player]\n"
+	      "gain = 0.25\n");
+	std::filesystem::remove(path);
+}
+
+TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]") {
+	std::istringstream input(
+		"[a]\n"
+		"value = 1\n"
+		"\n"
+		"[c]\n"
+		"value = 3\n");
+	TomlWriter writer;
+	REQUIRE(writer.load(input));
+
+	writer.section("a");
+	writer.write("value", 10);
+	writer.section("b");
+	writer.write("value", 20);
+	writer.section("c");
+	writer.write("value", 30);
+
+	std::ostringstream output;
+	REQUIRE(writer.save(output));
+	CHECK(output.str() ==
+	      "[a]\n"
+	      "value = 10\n"
+	      "\n"
+	      "[b]\n"
+	      "value = 20\n"
+	      "\n"
+	      "[c]\n"
+	      "value = 30\n");
+}
+
+TEST_CASE("TOML writer inserts missing values without reordering existing values", "[toml][writer]") {
+	SECTION("a missing value is inserted before the next modeled value") {
+		std::istringstream input("[values]\nvalA = 1\nvalC = 3\n");
+		TomlWriter writer;
+		REQUIRE(writer.load(input));
+
+		writer.section("values");
+		writer.write("valA", 10);
+		writer.write("valB", 20);
+		writer.write("valC", 30);
+
+		std::ostringstream output;
+		REQUIRE(writer.save(output));
+		CHECK(output.str() ==
+		      "[values]\n"
+		      "valA = 10\n"
+		      "valB = 20\n"
+		      "valC = 30\n");
+	}
+
+	SECTION("manual ordering is preserved and a trailing value stays trailing") {
+		std::istringstream input("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
+		TomlWriter writer;
+		REQUIRE(writer.load(input));
+
+		writer.section("values");
+		writer.write("valA", 10);
+		writer.write("valB", 20);
+		writer.write("valC", 30);
+		writer.write("valD", 40);
+
+		std::ostringstream output;
+		REQUIRE(writer.save(output));
+		CHECK(output.str() ==
+		      "[values]\n"
+		      "valB = 20\n"
+		      "valC = 30\n"
+		      "valA = 10\n"
+		      "valD = 40\n");
+	}
+}
+
+TEST_CASE("TOML writer keeps comments attached while reconciling", "[toml][writer]") {
+	std::istringstream input(
+		"# section a\n"
+		"[a] # inline section a\n"
+		"# value a\n"
+		"valA = 1 # inline value a\n"
+		"# value c\n"
+		"valC = 3 # inline value c\n"
+		"\n"
+		"# section c line 1\n"
+		"# section c line 2\n"
+		"[c] # inline section c\n"
+		"value = 3 # inline value in c\n");
+	TomlWriter writer;
+	REQUIRE(writer.load(input));
+
+	writer.section("a");
+	writer.write("valA", 10);
+	writer.write("valB", 20);
+	writer.write("valC", 30);
+	writer.section("b");
+	writer.write("value", 2);
+	writer.section("c");
+	writer.write("value", 300);
+
+	std::ostringstream output;
+	REQUIRE(writer.save(output));
+	CHECK(output.str() ==
+	      "# section a\n"
+	      "[a] # inline section a\n"
+	      "# value a\n"
+	      "valA = 10 # inline value a\n"
+	      "valB = 20\n"
+	      "# value c\n"
+	      "valC = 30 # inline value c\n"
+	      "\n"
+	      "[b]\n"
+	      "value = 2\n"
+	      "\n"
+	      "# section c line 1\n"
+	      "# section c line 2\n"
+	      "[c] # inline section c\n"
+	      "value = 300 # inline value in c\n");
 }
 
 TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {

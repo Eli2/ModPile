@@ -288,6 +288,30 @@ static std::optional<std::string_view> section_name(std::string_view line) {
 	return trim(line.substr(1, line.size() - 2));
 }
 
+static size_t attached_comment_begin(std::string_view document, size_t line_begin) {
+	size_t attached_begin = line_begin;
+	while (attached_begin > 0) {
+		size_t previous_line_end = attached_begin;
+		if (document[previous_line_end - 1] == '\n') --previous_line_end;
+		if (previous_line_end > 0 && document[previous_line_end - 1] == '\r') {
+			--previous_line_end;
+		}
+
+		const auto previous_newline =
+			previous_line_end == 0
+				? std::string_view::npos
+				: document.rfind('\n', previous_line_end - 1);
+		const auto previous_line_begin =
+			previous_newline == std::string_view::npos ? 0 : previous_newline + 1;
+		const auto previous_line = trim(document.substr(
+			previous_line_begin,
+			previous_line_end - previous_line_begin));
+		if (previous_line.empty() || previous_line.front() != '#') break;
+		attached_begin = previous_line_begin;
+	}
+	return attached_begin;
+}
+
 bool TomlWriter::load(const std::filesystem::path &path) {
 	std::ifstream input(path, std::ios::in | std::ios::binary);
 	if (!input) return false;
@@ -303,30 +327,22 @@ bool TomlWriter::load(std::istream &input) {
 		if (count > 0) document.append(buffer, static_cast<size_t>(count));
 	}
 	if (input.bad()) return false;
-	m_buf = std::move(document);
-	m_section.clear();
+	m_source_document = std::move(document);
+	m_sections.clear();
+	m_current_section.reset();
 	return true;
 }
 
 void TomlWriter::section(std::string_view name) {
-	m_section = name;
-
-	for (size_t begin = 0; begin < m_buf.size();) {
-		const auto newline = m_buf.find('\n', begin);
-		const auto end = newline == std::string::npos ? m_buf.size() : newline;
-		auto line = std::string_view(m_buf).substr(begin, end - begin);
-		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
-		if (auto existing = section_name(line); existing && *existing == name) return;
-		begin = newline == std::string::npos ? m_buf.size() : newline + 1;
+	for (size_t i = 0; i < m_sections.size(); ++i) {
+		if (m_sections[i].name == name) {
+			m_current_section = i;
+			return;
+		}
 	}
 
-	const auto newline = newline_for(m_buf);
-	if (!m_buf.empty() && m_buf.back() != '\n') m_buf.append(newline);
-	if (!m_buf.empty()) m_buf.append(newline);
-	m_buf += '[';
-	m_buf.append(name);
-	m_buf += ']';
-	m_buf.append(newline);
+	m_sections.push_back({std::string(name), {}});
+	m_current_section = m_sections.size() - 1;
 }
 
 static std::string escape_string(std::string_view s) {
@@ -371,24 +387,127 @@ void TomlWriter::write(std::string_view key, bool value) {
 }
 
 void TomlWriter::write_value(std::string_view key, std::string value) {
-	std::string current_section;
-	size_t insertion = m_buf.size();
-	bool found_section = false;
+	if (!m_current_section) return;
 
-	for (size_t begin = 0; begin < m_buf.size();) {
-		const auto newline_pos = m_buf.find('\n', begin);
-		const auto physical_end = newline_pos == std::string::npos ? m_buf.size() : newline_pos;
-		const auto next_begin = newline_pos == std::string::npos ? m_buf.size() : newline_pos + 1;
-		size_t content_end = physical_end;
-		if (content_end > begin && m_buf[content_end - 1] == '\r') --content_end;
-		auto line = std::string_view(m_buf).substr(begin, content_end - begin);
+	auto &entries = m_sections[*m_current_section].entries;
+	for (auto &entry : entries) {
+		if (entry.key == key) {
+			entry.value = std::move(value);
+			return;
+		}
+	}
+	entries.push_back({std::string(key), std::move(value)});
+}
+
+static void append_section(std::string &document, std::string_view name) {
+	const auto newline = newline_for(document);
+	if (!document.empty() && document.back() != '\n') document.append(newline);
+	if (!document.empty()) document.append(newline);
+	document += '[';
+	document.append(name);
+	document += ']';
+	document.append(newline);
+}
+
+static std::optional<size_t> find_section_begin(
+	std::string_view document,
+	std::string_view name)
+{
+	for (size_t begin = 0; begin < document.size();) {
+		const auto newline = document.find('\n', begin);
+		const auto end = newline == std::string_view::npos ? document.size() : newline;
+		auto line = document.substr(begin, end - begin);
+		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+		if (auto existing = section_name(line); existing && *existing == name) {
+			return attached_comment_begin(document, begin);
+		}
+		begin = newline == std::string_view::npos ? document.size() : newline + 1;
+	}
+	return std::nullopt;
+}
+
+static std::optional<size_t> find_key_begin(
+	std::string_view document,
+	std::string_view section_name_to_find,
+	std::string_view key)
+{
+	bool in_section = false;
+	for (size_t begin = 0; begin < document.size();) {
+		const auto newline = document.find('\n', begin);
+		const auto end = newline == std::string_view::npos ? document.size() : newline;
+		auto line = document.substr(begin, end - begin);
+		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
 
 		if (auto section = section_name(line)) {
-			if (found_section && *section != m_section) {
+			if (in_section) return std::nullopt;
+			in_section = *section == section_name_to_find;
+		} else if (in_section) {
+			const auto equals = find_unquoted(line, '=');
+			if (equals != std::string_view::npos && trim(line.substr(0, equals)) == key) {
+				return attached_comment_begin(document, begin);
+			}
+		}
+
+		begin = newline == std::string_view::npos ? document.size() : newline + 1;
+	}
+	return std::nullopt;
+}
+
+static void insert_section(
+	std::string &document,
+	size_t position,
+	std::string_view name)
+{
+	const auto newline = newline_for(document);
+	std::string block;
+
+	if (position > 0) {
+		size_t previous_line_end = position;
+		if (previous_line_end > 0 && document[previous_line_end - 1] == '\n') --previous_line_end;
+		if (previous_line_end > 0 && document[previous_line_end - 1] == '\r') --previous_line_end;
+		const auto previous_newline = document.rfind('\n', previous_line_end - 1);
+		const auto previous_line_begin =
+			previous_newline == std::string::npos ? 0 : previous_newline + 1;
+		if (!trim(std::string_view(document).substr(
+		        previous_line_begin,
+		        previous_line_end - previous_line_begin)).empty()) {
+			block.append(newline);
+		}
+	}
+
+	block += '[';
+	block.append(name);
+	block += ']';
+	block.append(newline);
+	block.append(newline);
+	document.insert(position, block);
+}
+
+static void reconcile_value(
+	std::string &document,
+	std::string_view section_name_to_find,
+	std::string_view key,
+	std::string_view value,
+	std::optional<size_t> insert_before)
+{
+	std::string current_section;
+	size_t insertion = document.size();
+	bool found_section = false;
+
+	for (size_t begin = 0; begin < document.size();) {
+		const auto newline_pos = document.find('\n', begin);
+		const auto physical_end = newline_pos == std::string::npos ? document.size() : newline_pos;
+		const auto next_begin = newline_pos == std::string::npos ? document.size() : newline_pos + 1;
+		size_t content_end = physical_end;
+		if (content_end > begin && document[content_end - 1] == '\r') --content_end;
+		auto line = std::string_view(document).substr(begin, content_end - begin);
+
+		if (auto section = section_name(line)) {
+			if (found_section && *section != section_name_to_find) {
 				break;
 			}
 			current_section = *section;
-			found_section = current_section == m_section;
+			found_section = current_section == section_name_to_find;
 			if (found_section) insertion = next_begin;
 		} else if (found_section) {
 			const auto equals = find_unquoted(line, '=');
@@ -400,7 +519,7 @@ void TomlWriter::write_value(std::string_view key, std::string value) {
 				size_t value_end = comment == std::string_view::npos ? line.size() : comment;
 				while (value_end > value_begin &&
 				       std::isspace(static_cast<unsigned char>(line[value_end - 1]))) --value_end;
-				m_buf.replace(begin + value_begin, value_end - value_begin, value);
+				document.replace(begin + value_begin, value_end - value_begin, value);
 				return;
 			}
 			if (!strip_comment(line).empty()) insertion = next_begin;
@@ -409,28 +528,86 @@ void TomlWriter::write_value(std::string_view key, std::string value) {
 		begin = next_begin;
 	}
 
-	const auto newline = newline_for(m_buf);
+	if (insert_before) insertion = *insert_before;
+	const auto newline = newline_for(document);
 	std::string assignment;
 	assignment.reserve(key.size() + value.size() + newline.size() + 3);
 	assignment.append(key);
 	assignment += " = ";
 	assignment += value;
 	assignment.append(newline);
-	if (insertion == m_buf.size() && !m_buf.empty() && m_buf.back() != '\n') {
+	if (insertion == document.size() && !document.empty() && document.back() != '\n') {
 		assignment.insert(0, newline);
 	}
-	m_buf.insert(insertion, assignment);
+	document.insert(insertion, assignment);
+}
+
+std::string TomlWriter::render(std::string document) const {
+	for (size_t i = 0; i < m_sections.size(); ++i) {
+		const auto &section = m_sections[i];
+		if (!find_section_begin(document, section.name)) {
+			std::optional<size_t> next_section;
+			for (size_t j = i + 1; j < m_sections.size(); ++j) {
+				next_section = find_section_begin(document, m_sections[j].name);
+				if (next_section) break;
+			}
+			if (next_section) {
+				insert_section(document, *next_section, section.name);
+			} else {
+				append_section(document, section.name);
+			}
+		}
+		for (size_t j = 0; j < section.entries.size(); ++j) {
+			const auto &entry = section.entries[j];
+			std::optional<size_t> next_key;
+			if (!find_key_begin(document, section.name, entry.key)) {
+				for (size_t k = j + 1; k < section.entries.size(); ++k) {
+					next_key = find_key_begin(
+						document,
+						section.name,
+						section.entries[k].key);
+					if (next_key) break;
+				}
+			}
+			reconcile_value(
+				document,
+				section.name,
+				entry.key,
+				entry.value,
+				next_key);
+		}
+	}
+	return document;
 }
 
 bool TomlWriter::save(const std::filesystem::path &path) const {
-	std::ofstream f(path, std::ios::out | std::ios::binary);
-	if (!f) {
-		return false;
+	std::string document;
+	std::ifstream input(path, std::ios::in | std::ios::binary);
+	if (input) {
+		char buffer[4096];
+		while (input) {
+			input.read(buffer, sizeof(buffer));
+			const auto count = input.gcount();
+			if (count > 0) document.append(buffer, static_cast<size_t>(count));
+		}
+		if (input.bad()) return false;
+	} else {
+		std::error_code error;
+		if (std::filesystem::exists(path, error) || error) return false;
 	}
-	return save(f);
+
+	document = render(std::move(document));
+	std::ofstream f(path, std::ios::out | std::ios::binary);
+	if (!f) return false;
+	f.write(document.data(), static_cast<std::streamsize>(document.size()));
+	if (!f.good()) return false;
+	f.close();
+	if (!f) return false;
+	return true;
 }
 
 bool TomlWriter::save(std::ostream &output) const {
-	output.write(m_buf.data(), static_cast<std::streamsize>(m_buf.size()));
+	const auto document = render(m_source_document);
+	output.write(document.data(), static_cast<std::streamsize>(document.size()));
 	return output.good();
 }
