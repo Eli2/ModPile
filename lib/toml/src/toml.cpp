@@ -6,37 +6,11 @@
 #include <charconv>
 #include <cctype>
 #include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <format>
 #include <fstream>
+#include <iterator>
 #include <limits>
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-static std::string_view trim(std::string_view s) {
-	while (!s.empty() && std::isspace((unsigned char)s.front())) s.remove_prefix(1);
-	while (!s.empty() && std::isspace((unsigned char)s.back()))  s.remove_suffix(1);
-	return s;
-}
-
-static std::string_view strip_comment(std::string_view s) {
-	bool in_string = false;
-	bool escaped = false;
-	for (size_t i = 0; i < s.size(); ++i) {
-		if (in_string && s[i] == '\\' && !escaped) {
-			escaped = true;
-			continue;
-		}
-		if (s[i] == '"' && !escaped) {
-			in_string = !in_string;
-		} else if (s[i] == '#' && !in_string) {
-			return trim(s.substr(0, i));
-		}
-		escaped = false;
-	}
-	return trim(s);
-}
 
 // ─── TomlReader ──────────────────────────────────────────────────────────────
 
@@ -123,22 +97,38 @@ public:
 			skip_spaces();
 			if (eof()) break;
 			if (peek() == '#') {
-				if (!parse_comment(false)) return false;
+				TomlComment comment;
+				if (!read_comment(comment, false)) return false;
+				m_pending_comments.push_back(std::move(comment));
 			} else if (newline_here()) {
 				if (!consume_newline()) return false;
 			} else {
+				m_statement_value = nullptr;
 				if (peek() == '[') {
 					if (!parse_header()) return false;
 				} else {
 					if (!parse_assignment()) return false;
 				}
+				if (!m_statement_value) return false;
+				m_statement_value->leading_comments.insert(
+					m_statement_value->leading_comments.end(),
+					std::make_move_iterator(m_pending_comments.begin()),
+					std::make_move_iterator(m_pending_comments.end()));
+				m_pending_comments.clear();
 				skip_spaces();
 				if (!eof() && peek() == '#') {
-					if (!parse_comment(true)) return false;
+					TomlComment comment;
+					if (!read_comment(comment, true)) return false;
+					m_statement_value->trailing_comment = std::move(comment);
 				}
 				if (!eof() && !consume_newline()) return false;
 			}
 		}
+		m_document.trailing_comments.insert(
+			m_document.trailing_comments.end(),
+			std::make_move_iterator(m_pending_comments.begin()),
+			std::make_move_iterator(m_pending_comments.end()));
+		m_pending_comments.clear();
 		return true;
 	}
 
@@ -146,6 +136,8 @@ private:
 	std::string_view m_input;
 	TomlDocument &m_document;
 	TomlValue *m_current;
+	TomlValue *m_statement_value = nullptr;
+	std::vector<TomlComment> m_pending_comments;
 	size_t m_pos = 0;
 	size_t m_line = 1;
 	size_t m_column = 1;
@@ -179,7 +171,7 @@ private:
 	void skip_spaces() {
 		while (peek() == ' ' || peek() == '\t') advance();
 	}
-	bool parse_comment(bool trailing) {
+	bool read_comment(TomlComment &comment, bool trailing) {
 		const auto offset = m_pos;
 		const auto line = m_line;
 		const auto column = m_column;
@@ -191,13 +183,13 @@ private:
 			if ((c < 0x20 && c != '\t') || c == 0x7f) return false;
 			advance();
 		}
-		m_document.comments.push_back({
+		comment = {
 			std::string(m_input.substr(begin, m_pos - begin)),
 			offset,
 			line,
 			column,
 			trailing
-		});
+		};
 		return true;
 	}
 
@@ -213,7 +205,9 @@ private:
 			if (peek() != ']') return false;
 			advance();
 		}
-		return open_table(path, array);
+		if (!open_table(path, array)) return false;
+		m_statement_value = m_current;
+		return true;
 	}
 
 	bool parse_assignment() {
@@ -224,7 +218,12 @@ private:
 		skip_spaces();
 		TomlValue value;
 		if (!parse_value(value)) return false;
-		return insert_value(*m_current, path, std::move(value), false);
+		return insert_value(
+			*m_current,
+			path,
+			std::move(value),
+			false,
+			&m_statement_value);
 	}
 
 	bool parse_key_path(std::vector<std::string> &path, char terminator) {
@@ -419,11 +418,22 @@ private:
 		return false;
 	}
 
-	bool skip_array_space(bool trailing) {
+	bool skip_array_space(
+		TomlValue &array,
+		TomlValue *last,
+		std::vector<TomlComment> &pending,
+		bool trailing)
+	{
 		while (true) {
 			skip_spaces();
 			if (peek() == '#') {
-				if (!parse_comment(trailing)) return false;
+				TomlComment comment;
+				if (!read_comment(comment, trailing)) return false;
+				if (trailing && last) {
+					last->trailing_comment = std::move(comment);
+				} else {
+					pending.push_back(std::move(comment));
+				}
 				trailing = false;
 			} else if (newline_here()) {
 				if (!consume_newline()) return false;
@@ -437,24 +447,30 @@ private:
 	bool parse_array(TomlValue &value) {
 		value = TomlValue{TomlValue::Type::Array};
 		advance();
-		if (!skip_array_space(false)) return false;
+		std::vector<TomlComment> pending;
+		if (!skip_array_space(value, nullptr, pending, false)) return false;
 		if (peek() == ']') {
+			value.dangling_comments = std::move(pending);
 			advance();
 			return true;
 		}
 		while (true) {
 			TomlValue element;
 			if (!parse_value(element)) return false;
+			element.leading_comments = std::move(pending);
+			pending.clear();
 			value.array.push_back(std::move(element));
-			if (!skip_array_space(true)) return false;
+			if (!skip_array_space(value, &value.array.back(), pending, true)) return false;
 			if (peek() == ']') {
+				value.dangling_comments = std::move(pending);
 				advance();
 				return true;
 			}
 			if (peek() != ',') return false;
 			advance();
-			if (!skip_array_space(false)) return false;
+			if (!skip_array_space(value, nullptr, pending, false)) return false;
 			if (peek() == ']') {
+				value.dangling_comments = std::move(pending);
 				advance();
 				return true;
 			}
@@ -478,7 +494,7 @@ private:
 			skip_spaces();
 			TomlValue element;
 			if (!parse_value(element)) return false;
-			if (!insert_value(value, path, std::move(element), true)) return false;
+			if (!insert_value(value, path, std::move(element), true, nullptr)) return false;
 			skip_spaces();
 			if (peek() == '}') {
 				advance();
@@ -805,7 +821,8 @@ private:
 		TomlValue &table,
 		const std::vector<std::string> &path,
 		TomlValue value,
-		bool in_inline)
+		bool in_inline,
+		TomlValue **inserted)
 	{
 		if (path.empty() || table.type != TomlValue::Type::Table) return false;
 		TomlValue *cursor = &table;
@@ -826,7 +843,8 @@ private:
 			cursor = child;
 		}
 		if (cursor->find(path.back())) return false;
-		cursor->insert(path.back(), std::move(value));
+		auto &new_value = cursor->insert(path.back(), std::move(value));
+		if (inserted) *inserted = &new_value;
 		return true;
 	}
 };
@@ -953,88 +971,6 @@ bool TomlReader::get(
 
 // ─── TomlWriter ──────────────────────────────────────────────────────────────
 
-static std::string_view newline_for(std::string_view document) {
-	return document.find("\r\n") != std::string_view::npos ? "\r\n" : "\n";
-}
-
-static size_t find_unquoted(std::string_view text, char needle, size_t start = 0) {
-	bool in_basic_string = false;
-	bool in_literal_string = false;
-	bool escaped = false;
-	for (size_t i = start; i < text.size(); ++i) {
-		const char c = text[i];
-		if (in_basic_string && c == '\\' && !escaped) {
-			escaped = true;
-			continue;
-		}
-		if (c == '"' && !in_literal_string && !escaped) {
-			in_basic_string = !in_basic_string;
-		} else if (c == '\'' && !in_basic_string) {
-			in_literal_string = !in_literal_string;
-		} else if (c == needle && !in_basic_string && !in_literal_string) {
-			return i;
-		}
-		escaped = false;
-	}
-	return std::string_view::npos;
-}
-
-static std::optional<std::string_view> section_name(std::string_view line) {
-	const auto comment = find_unquoted(line, '#');
-	if (comment != std::string_view::npos) line = line.substr(0, comment);
-	line = trim(line);
-	if (line.size() < 2 || line.front() != '[' || line.back() != ']' ||
-	    (line.size() >= 2 && line[1] == '[')) {
-		return std::nullopt;
-	}
-	return trim(line.substr(1, line.size() - 2));
-}
-
-static size_t attached_comment_begin(std::string_view document, size_t line_begin) {
-	size_t attached_begin = line_begin;
-	while (attached_begin > 0) {
-		size_t previous_line_end = attached_begin;
-		if (document[previous_line_end - 1] == '\n') --previous_line_end;
-		if (previous_line_end > 0 && document[previous_line_end - 1] == '\r') {
-			--previous_line_end;
-		}
-
-		const auto previous_newline =
-			previous_line_end == 0
-				? std::string_view::npos
-				: document.rfind('\n', previous_line_end - 1);
-		const auto previous_line_begin =
-			previous_newline == std::string_view::npos ? 0 : previous_newline + 1;
-		const auto previous_line = trim(document.substr(
-			previous_line_begin,
-			previous_line_end - previous_line_begin));
-		if (previous_line.empty() || previous_line.front() != '#') break;
-		attached_begin = previous_line_begin;
-	}
-	return attached_begin;
-}
-
-bool TomlWriter::load(const std::filesystem::path &path) {
-	std::ifstream input(path, std::ios::in | std::ios::binary);
-	if (!input) return false;
-	return load(input);
-}
-
-bool TomlWriter::load(std::istream &input) {
-	std::string document;
-	char buffer[4096];
-	while (input) {
-		input.read(buffer, sizeof(buffer));
-		const auto count = input.gcount();
-		if (count > 0) document.append(buffer, static_cast<size_t>(count));
-	}
-	if (input.bad()) return false;
-	m_source_document = std::move(document);
-	m_document = {};
-	m_current_section.reset();
-	return true;
-}
-
 void TomlWriter::section(std::string_view name) {
 	auto *value = m_document.root.find(name);
 	if (!value) {
@@ -1106,9 +1042,8 @@ void TomlWriter::write(std::string_view key, bool value) {
 	write_value(key, std::move(toml_value));
 }
 
-void TomlWriter::set_document(TomlDocument document) {
-	m_document = std::move(document);
-	m_source_document.clear();
+void TomlWriter::load(const TomlDocument &document) {
+	m_document = document;
 	m_current_section.reset();
 }
 
@@ -1117,153 +1052,13 @@ void TomlWriter::write_value(std::string_view key, TomlValue value) {
 	auto *section_value = m_document.root.find(*m_current_section);
 	if (!section_value || section_value->type != TomlValue::Type::Table) return;
 	if (auto *existing = section_value->find(key)) {
+		value.leading_comments = std::move(existing->leading_comments);
+		value.trailing_comment = std::move(existing->trailing_comment);
+		value.dangling_comments = std::move(existing->dangling_comments);
 		*existing = std::move(value);
 		return;
 	}
 	section_value->insert(std::string(key), std::move(value));
-}
-
-static void append_section(std::string &document, std::string_view name) {
-	const auto newline = newline_for(document);
-	if (!document.empty() && document.back() != '\n') document.append(newline);
-	if (!document.empty()) document.append(newline);
-	document += '[';
-	document.append(name);
-	document += ']';
-	document.append(newline);
-}
-
-static std::optional<size_t> find_section_begin(
-	std::string_view document,
-	std::string_view name)
-{
-	for (size_t begin = 0; begin < document.size();) {
-		const auto newline = document.find('\n', begin);
-		const auto end = newline == std::string_view::npos ? document.size() : newline;
-		auto line = document.substr(begin, end - begin);
-		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
-		if (auto existing = section_name(line); existing && *existing == name) {
-			return attached_comment_begin(document, begin);
-		}
-		begin = newline == std::string_view::npos ? document.size() : newline + 1;
-	}
-	return std::nullopt;
-}
-
-static std::optional<size_t> find_key_begin(
-	std::string_view document,
-	std::string_view section_name_to_find,
-	std::string_view key)
-{
-	bool in_section = false;
-	for (size_t begin = 0; begin < document.size();) {
-		const auto newline = document.find('\n', begin);
-		const auto end = newline == std::string_view::npos ? document.size() : newline;
-		auto line = document.substr(begin, end - begin);
-		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
-
-		if (auto section = section_name(line)) {
-			if (in_section) return std::nullopt;
-			in_section = *section == section_name_to_find;
-		} else if (in_section) {
-			const auto equals = find_unquoted(line, '=');
-			if (equals != std::string_view::npos && trim(line.substr(0, equals)) == key) {
-				return attached_comment_begin(document, begin);
-			}
-		}
-
-		begin = newline == std::string_view::npos ? document.size() : newline + 1;
-	}
-	return std::nullopt;
-}
-
-static void insert_section(
-	std::string &document,
-	size_t position,
-	std::string_view name)
-{
-	const auto newline = newline_for(document);
-	std::string block;
-
-	if (position > 0) {
-		size_t previous_line_end = position;
-		if (previous_line_end > 0 && document[previous_line_end - 1] == '\n') --previous_line_end;
-		if (previous_line_end > 0 && document[previous_line_end - 1] == '\r') --previous_line_end;
-		const auto previous_newline = document.rfind('\n', previous_line_end - 1);
-		const auto previous_line_begin =
-			previous_newline == std::string::npos ? 0 : previous_newline + 1;
-		if (!trim(std::string_view(document).substr(
-		        previous_line_begin,
-		        previous_line_end - previous_line_begin)).empty()) {
-			block.append(newline);
-		}
-	}
-
-	block += '[';
-	block.append(name);
-	block += ']';
-	block.append(newline);
-	block.append(newline);
-	document.insert(position, block);
-}
-
-static void reconcile_value(
-	std::string &document,
-	std::string_view section_name_to_find,
-	std::string_view key,
-	std::string_view value,
-	std::optional<size_t> insert_before)
-{
-	std::string current_section;
-	size_t insertion = document.size();
-	bool found_section = false;
-
-	for (size_t begin = 0; begin < document.size();) {
-		const auto newline_pos = document.find('\n', begin);
-		const auto physical_end = newline_pos == std::string::npos ? document.size() : newline_pos;
-		const auto next_begin = newline_pos == std::string::npos ? document.size() : newline_pos + 1;
-		size_t content_end = physical_end;
-		if (content_end > begin && document[content_end - 1] == '\r') --content_end;
-		auto line = std::string_view(document).substr(begin, content_end - begin);
-
-		if (auto section = section_name(line)) {
-			if (found_section && *section != section_name_to_find) {
-				break;
-			}
-			current_section = *section;
-			found_section = current_section == section_name_to_find;
-			if (found_section) insertion = next_begin;
-		} else if (found_section) {
-			const auto equals = find_unquoted(line, '=');
-			if (equals != std::string_view::npos && trim(line.substr(0, equals)) == key) {
-				size_t value_begin = equals + 1;
-				while (value_begin < line.size() &&
-				       std::isspace(static_cast<unsigned char>(line[value_begin]))) ++value_begin;
-				auto comment = find_unquoted(line, '#', value_begin);
-				size_t value_end = comment == std::string_view::npos ? line.size() : comment;
-				while (value_end > value_begin &&
-				       std::isspace(static_cast<unsigned char>(line[value_end - 1]))) --value_end;
-				document.replace(begin + value_begin, value_end - value_begin, value);
-				return;
-			}
-			if (!strip_comment(line).empty()) insertion = next_begin;
-		}
-
-		begin = next_begin;
-	}
-
-	if (insert_before) insertion = *insert_before;
-	const auto newline = newline_for(document);
-	std::string assignment;
-	assignment.reserve(key.size() + value.size() + newline.size() + 3);
-	assignment.append(key);
-	assignment += " = ";
-	assignment += value;
-	assignment.append(newline);
-	if (insertion == document.size() && !document.empty() && document.back() != '\n') {
-		assignment.insert(0, newline);
-	}
-	document.insert(insertion, assignment);
 }
 
 static std::string serialize_key(std::string_view key) {
@@ -1290,6 +1085,28 @@ static std::string serialize_float(double value) {
 }
 
 static std::string serialize_value(const TomlValue &value);
+
+static void append_comments(
+	std::string &output,
+	const std::vector<TomlComment> &comments,
+	std::string_view indentation = {})
+{
+	for (const auto &comment : comments) {
+		output.append(indentation);
+		output += '#';
+		output += comment.text;
+		output += '\n';
+	}
+}
+
+static void append_trailing_comment(
+	std::string &output,
+	const std::optional<TomlComment> &comment)
+{
+	if (!comment) return;
+	output += " #";
+	output += comment->text;
+}
 
 static std::string serialize_inline_table(const TomlValue &value) {
 	std::string output = "{";
@@ -1320,6 +1137,26 @@ static std::string serialize_value(const TomlValue &value) {
 		case TomlValue::Type::TimeLocal:
 			return value.str;
 		case TomlValue::Type::Array: {
+			const bool has_comments =
+				!value.dangling_comments.empty() ||
+				std::any_of(value.array.begin(), value.array.end(), [](const TomlValue &element) {
+					return !element.leading_comments.empty() || element.trailing_comment.has_value();
+				});
+			if (has_comments) {
+				std::string output = "[\n";
+				for (size_t i = 0; i < value.array.size(); ++i) {
+					const auto &element = value.array[i];
+					append_comments(output, element.leading_comments, "  ");
+					output += "  ";
+					output += serialize_value(element);
+					if (i + 1 < value.array.size()) output += ',';
+					append_trailing_comment(output, element.trailing_comment);
+					output += '\n';
+				}
+				append_comments(output, value.dangling_comments, "  ");
+				output += ']';
+				return output;
+			}
 			std::string output = "[";
 			for (size_t i = 0; i < value.array.size(); ++i) {
 				if (i > 0) output += ", ";
@@ -1361,9 +1198,11 @@ static void serialize_table_contents(
 	for (const auto &[key, value] : table.table) {
 		if (value.type == TomlValue::Type::Table && !value.inline_table) continue;
 		if (is_table_array(value)) continue;
+		append_comments(output, value.leading_comments);
 		output += serialize_key(key);
 		output += " = ";
 		output += serialize_value(value);
+		append_trailing_comment(output, value.trailing_comment);
 		output += '\n';
 	}
 
@@ -1372,16 +1211,22 @@ static void serialize_table_contents(
 		child_path.push_back(key);
 		if (value.type == TomlValue::Type::Table && !value.inline_table) {
 			append_blank_line(output);
+			append_comments(output, value.leading_comments);
 			output += '[';
 			output += serialize_path(child_path);
-			output += "]\n";
+			output += ']';
+			append_trailing_comment(output, value.trailing_comment);
+			output += '\n';
 			serialize_table_contents(output, value, child_path);
 		} else if (is_table_array(value)) {
 			for (const auto &element : value.array) {
 				append_blank_line(output);
+				append_comments(output, element.leading_comments);
 				output += "[[";
 				output += serialize_path(child_path);
-				output += "]]\n";
+				output += "]]";
+				append_trailing_comment(output, element.trailing_comment);
+				output += '\n';
 				serialize_table_contents(output, element, child_path);
 			}
 		}
@@ -1390,84 +1235,17 @@ static void serialize_table_contents(
 
 static std::string serialize_document(const TomlDocument &document) {
 	std::string output;
-	for (const auto &comment : document.comments) {
-		output += '#';
-		output += comment.text;
-		output += '\n';
-	}
-	if (!document.comments.empty() && !document.root.table.empty()) output += '\n';
 	serialize_table_contents(output, document.root, {});
+	append_comments(output, document.trailing_comments);
 	return output;
 }
 
-std::string TomlWriter::render(std::string document) const {
-	if (document.empty()) return serialize_document(m_document);
-
-	for (size_t i = 0; i < m_document.root.table.size(); ++i) {
-		const auto &[section_name_value, section] = m_document.root.table[i];
-		if (section.type != TomlValue::Type::Table) continue;
-		if (!find_section_begin(document, section_name_value)) {
-			std::optional<size_t> next_section;
-			for (size_t j = i + 1; j < m_document.root.table.size(); ++j) {
-				const auto &[next_name, next_value] = m_document.root.table[j];
-				if (next_value.type != TomlValue::Type::Table) continue;
-				next_section = find_section_begin(document, next_name);
-				if (next_section) break;
-			}
-			if (next_section) {
-				insert_section(document, *next_section, section_name_value);
-			} else {
-				append_section(document, section_name_value);
-			}
-		}
-		for (size_t j = 0; j < section.table.size(); ++j) {
-			const auto &[entry_key, entry_value] = section.table[j];
-			if (entry_value.type == TomlValue::Type::Table || is_table_array(entry_value)) {
-				continue;
-			}
-			std::optional<size_t> next_key;
-			if (!find_key_begin(document, section_name_value, entry_key)) {
-				for (size_t k = j + 1; k < section.table.size(); ++k) {
-					const auto &[next_key_name, next_key_value] = section.table[k];
-					if (next_key_value.type == TomlValue::Type::Table ||
-					    is_table_array(next_key_value)) {
-						continue;
-					}
-					next_key = find_key_begin(
-						document,
-						section_name_value,
-						next_key_name);
-					if (next_key) break;
-				}
-			}
-			reconcile_value(
-				document,
-				section_name_value,
-				entry_key,
-				serialize_value(entry_value),
-				next_key);
-		}
-	}
-	return document;
+std::string TomlWriter::render() const {
+	return serialize_document(m_document);
 }
 
 bool TomlWriter::save(const std::filesystem::path &path) const {
-	std::string document;
-	std::ifstream input(path, std::ios::in | std::ios::binary);
-	if (input) {
-		char buffer[4096];
-		while (input) {
-			input.read(buffer, sizeof(buffer));
-			const auto count = input.gcount();
-			if (count > 0) document.append(buffer, static_cast<size_t>(count));
-		}
-		if (input.bad()) return false;
-	} else {
-		std::error_code error;
-		if (std::filesystem::exists(path, error) || error) return false;
-	}
-
-	document = render(std::move(document));
+	const auto document = render();
 	std::ofstream f(path, std::ios::out | std::ios::binary);
 	if (!f) return false;
 	f.write(document.data(), static_cast<std::streamsize>(document.size()));
@@ -1478,7 +1256,7 @@ bool TomlWriter::save(const std::filesystem::path &path) const {
 }
 
 bool TomlWriter::save(std::ostream &output) const {
-	const auto document = render(m_source_document);
+	const auto document = render();
 	output.write(document.data(), static_cast<std::streamsize>(document.size()));
 	return output.good();
 }

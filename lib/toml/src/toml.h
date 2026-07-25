@@ -15,6 +15,14 @@
 #include <utility>
 #include <vector>
 
+struct TomlComment {
+	std::string text; // Text after '#', excluding the line ending.
+	size_t offset = 0;
+	size_t line = 1;
+	size_t column = 1;
+	bool trailing = false;
+};
+
 struct TomlValue {
 	enum class Type {
 		String,
@@ -39,6 +47,9 @@ struct TomlValue {
 	std::vector<TomlValue> array;
 	std::vector<std::pair<std::string, TomlValue>> table;
 	std::string lexical; // Optional preferred spelling used by the writer.
+	std::vector<TomlComment> leading_comments;
+	std::optional<TomlComment> trailing_comment;
+	std::vector<TomlComment> dangling_comments;
 
 	// Parser metadata used to enforce TOML's table-definition rules.
 	bool explicit_table = false;
@@ -70,17 +81,9 @@ inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
 	return table.back().second;
 }
 
-struct TomlComment {
-	std::string text; // Text after '#', excluding the line ending.
-	size_t offset = 0;
-	size_t line = 1;
-	size_t column = 1;
-	bool trailing = false;
-};
-
 struct TomlDocument {
 	TomlValue root{TomlValue::Type::Table};
-	std::vector<TomlComment> comments;
+	std::vector<TomlComment> trailing_comments;
 };
 
 class TomlReader {
@@ -136,9 +139,7 @@ private:
 
 class TomlWriter {
 public:
-	// Load an existing document so writes preserve its layout and unknown content.
-	bool load(std::istream &input);
-	bool load(const std::filesystem::path &path);
+	void load(const TomlDocument &document);
 
 	// Section/key write methods — output order matches call order.
 	void section(std::string_view name);
@@ -148,7 +149,6 @@ public:
 	void write(std::string_view key, double             value);
 	void write(std::string_view key, bool               value);
 
-	void set_document(TomlDocument document);
 	const TomlDocument &document() const noexcept { return m_document; }
 
 	template<std::integral T>
@@ -173,10 +173,9 @@ public:
 	bool save(const std::filesystem::path &path) const;
 
 private:
-	std::string          m_source_document;
 	TomlDocument         m_document;
 	std::optional<std::string> m_current_section;
 
-	std::string render(std::string document) const;
+	std::string render() const;
 	void write_value(std::string_view key, TomlValue value);
 };

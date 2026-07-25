@@ -126,15 +126,17 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 	CHECK(document.root.table[1].second.table[0].first == "first");
 	CHECK(document.root.table[1].second.table[1].first == "second");
 
-	REQUIRE(document.comments.size() == 3);
-	CHECK(document.comments[0].text == " document comment");
-	CHECK_FALSE(document.comments[0].trailing);
-	CHECK(document.comments[1].text == " trailing root comment");
-	CHECK(document.comments[1].trailing);
-	CHECK(document.comments[2].text == " section comment");
-	CHECK(document.comments[0].line == 1);
-	CHECK(document.comments[1].line == 2);
-	CHECK(document.comments[2].line == 6);
+	const auto &root = document.root.table[0].second;
+	REQUIRE(root.leading_comments.size() == 1);
+	CHECK(root.leading_comments[0].text == " document comment");
+	REQUIRE(root.trailing_comment);
+	CHECK(root.trailing_comment->text == " trailing root comment");
+	const auto &section_a = document.root.table[2].second;
+	REQUIRE(section_a.leading_comments.size() == 1);
+	CHECK(section_a.leading_comments[0].text == " section comment");
+	CHECK(root.leading_comments[0].line == 1);
+	CHECK(root.trailing_comment->line == 2);
+	CHECK(section_a.leading_comments[0].line == 6);
 }
 
 TEST_CASE("TOML reader decodes supported basic-string escapes", "[toml][reader]") {
@@ -237,10 +239,10 @@ TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writ
 
 TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {
 	TomlDocument document;
-	document.comments.push_back({" generated document", 0, 1, 1, false});
 
 	TomlValue title{TomlValue::Type::String};
 	title.str = "demo";
+	title.leading_comments.push_back({" generated document", 0, 1, 1, false});
 	document.root.insert("title", std::move(title));
 
 	TomlValue values{TomlValue::Type::Table};
@@ -263,7 +265,7 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 	document.root.insert("values", std::move(values));
 
 	TomlWriter writer;
-	writer.set_document(std::move(document));
+	writer.load(document);
 	REQUIRE(writer.document().root.table[0].first == "title");
 	REQUIRE(writer.document().root.table[1].first == "values");
 
@@ -271,7 +273,6 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 	REQUIRE(writer.save(output));
 	CHECK(output.str() ==
 	      "# generated document\n"
-	      "\n"
 	      "title = \"demo\"\n"
 	      "\n"
 	      "[values]\n"
@@ -303,7 +304,7 @@ TEST_CASE("TOML writer escapes basic strings and round-trips them", "[toml][writ
 	CHECK(reader.get_string("strings", "value") == expected);
 }
 
-TEST_CASE("TOML writer preserves a human-edited document", "[toml][writer]") {
+TEST_CASE("TOML writer preserves parsed comments and unknown values", "[toml][writer]") {
 	const std::string original =
 		"# Personal settings; keep this comment\n"
 		"[player] # playback controls\n"
@@ -312,9 +313,9 @@ TEST_CASE("TOML writer preserves a human-edited document", "[toml][writer]") {
 		"\n"
 		"[library]\n"
 		"paths = [\"~/Music\", \"/mnt/modules\"]\n";
-	std::istringstream input(original);
+	auto reader = read_toml(original);
 	TomlWriter writer;
-	REQUIRE(writer.load(input));
+	writer.load(reader.document());
 
 	writer.section("player");
 	writer.write("gain", 0.75);
@@ -324,17 +325,17 @@ TEST_CASE("TOML writer preserves a human-edited document", "[toml][writer]") {
 	CHECK(output.str() ==
 	      "# Personal settings; keep this comment\n"
 	      "[player] # playback controls\n"
-	      "gain   = 0.75    # adjusted by the volume knob\n"
+	      "gain = 0.75 # adjusted by the volume knob\n"
 	      "theme = \"midnight\" # setting unknown to ModPile\n"
 	      "\n"
 	      "[library]\n"
 	      "paths = [\"~/Music\", \"/mnt/modules\"]\n");
 }
 
-TEST_CASE("TOML writer preserves CRLF and appends missing keys", "[toml][writer]") {
-	std::istringstream input("[player]\r\ngain = 1\r\n\r\n[other]\r\nvalue = true\r\n");
+TEST_CASE("TOML writer canonicalizes newlines and appends missing keys", "[toml][writer]") {
+	auto reader = read_toml("[player]\r\ngain = 1\r\n\r\n[other]\r\nvalue = true\r\n");
 	TomlWriter writer;
-	REQUIRE(writer.load(input));
+	writer.load(reader.document());
 
 	writer.section("player");
 	writer.write("stereo_width", 0.5);
@@ -342,18 +343,18 @@ TEST_CASE("TOML writer preserves CRLF and appends missing keys", "[toml][writer]
 	std::ostringstream output;
 	REQUIRE(writer.save(output));
 	CHECK(output.str() ==
-	      "[player]\r\n"
-	      "gain = 1\r\n"
-	      "stereo_width = 0.5\r\n"
-	      "\r\n"
-	      "[other]\r\n"
-	      "value = true\r\n");
+	      "[player]\n"
+	      "gain = 1\n"
+	      "stereo_width = 0.5\n"
+	      "\n"
+	      "[other]\n"
+	      "value = true\n");
 }
 
-TEST_CASE("TOML writer keeps the requested data separate from its source document", "[toml][writer]") {
-	std::istringstream input("[player]\ngain = 1.0\n");
+TEST_CASE("TOML writer updates its loaded document deterministically", "[toml][writer]") {
+	auto reader = read_toml("[player]\ngain = 1.0\n");
 	TomlWriter writer;
-	REQUIRE(writer.load(input));
+	writer.load(reader.document());
 
 	writer.section("player");
 	writer.write("gain", 0.75);
@@ -367,7 +368,7 @@ TEST_CASE("TOML writer keeps the requested data separate from its source documen
 	CHECK(second.str() == first.str());
 }
 
-TEST_CASE("TOML writer reconciles the file that exists when it is saved", "[toml][writer]") {
+TEST_CASE("TOML writer replaces a file from its supplied document", "[toml][writer]") {
 	const auto path = std::filesystem::temp_directory_path() / "modpile_test_toml_writer.toml";
 	{
 		std::ofstream file(path, std::ios::binary);
@@ -385,21 +386,20 @@ TEST_CASE("TOML writer reconciles the file that exists when it is saved", "[toml
 	std::ostringstream contents;
 	contents << file.rdbuf();
 	CHECK(contents.str() ==
-	      "# changed after the writer was built\n"
 	      "[player]\n"
 	      "gain = 0.25\n");
 	std::filesystem::remove(path);
 }
 
-TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]") {
-	std::istringstream input(
+TEST_CASE("TOML writer appends missing sections without reordering the document", "[toml][writer]") {
+	auto reader = read_toml(
 		"[a]\n"
 		"value = 1\n"
 		"\n"
 		"[c]\n"
 		"value = 3\n");
 	TomlWriter writer;
-	REQUIRE(writer.load(input));
+	writer.load(reader.document());
 
 	writer.section("a");
 	writer.write("value", 10);
@@ -414,18 +414,18 @@ TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]
 	      "[a]\n"
 	      "value = 10\n"
 	      "\n"
-	      "[b]\n"
-	      "value = 20\n"
-	      "\n"
 	      "[c]\n"
-	      "value = 30\n");
+	      "value = 30\n"
+	      "\n"
+	      "[b]\n"
+	      "value = 20\n");
 }
 
 TEST_CASE("TOML writer inserts missing values without reordering existing values", "[toml][writer]") {
-	SECTION("a missing value is inserted before the next modeled value") {
-		std::istringstream input("[values]\nvalA = 1\nvalC = 3\n");
+	SECTION("a missing value is appended after existing ordered values") {
+		auto reader = read_toml("[values]\nvalA = 1\nvalC = 3\n");
 		TomlWriter writer;
-		REQUIRE(writer.load(input));
+		writer.load(reader.document());
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -437,14 +437,14 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 		CHECK(output.str() ==
 		      "[values]\n"
 		      "valA = 10\n"
-		      "valB = 20\n"
-		      "valC = 30\n");
+		      "valC = 30\n"
+		      "valB = 20\n");
 	}
 
 	SECTION("manual ordering is preserved and a trailing value stays trailing") {
-		std::istringstream input("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
+		auto reader = read_toml("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
 		TomlWriter writer;
-		REQUIRE(writer.load(input));
+		writer.load(reader.document());
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -463,8 +463,8 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 	}
 }
 
-TEST_CASE("TOML writer keeps comments attached while reconciling", "[toml][writer]") {
-	std::istringstream input(
+TEST_CASE("TOML writer keeps structured comments attached while updating", "[toml][writer]") {
+	auto reader = read_toml(
 		"# section a\n"
 		"[a] # inline section a\n"
 		"# value a\n"
@@ -477,7 +477,7 @@ TEST_CASE("TOML writer keeps comments attached while reconciling", "[toml][write
 		"[c] # inline section c\n"
 		"value = 3 # inline value in c\n");
 	TomlWriter writer;
-	REQUIRE(writer.load(input));
+	writer.load(reader.document());
 
 	writer.section("a");
 	writer.write("valA", 10);
@@ -495,17 +495,17 @@ TEST_CASE("TOML writer keeps comments attached while reconciling", "[toml][write
 	      "[a] # inline section a\n"
 	      "# value a\n"
 	      "valA = 10 # inline value a\n"
-	      "valB = 20\n"
 	      "# value c\n"
 	      "valC = 30 # inline value c\n"
-	      "\n"
-	      "[b]\n"
-	      "value = 2\n"
+	      "valB = 20\n"
 	      "\n"
 	      "# section c line 1\n"
 	      "# section c line 2\n"
 	      "[c] # inline section c\n"
-	      "value = 300 # inline value in c\n");
+	      "value = 300 # inline value in c\n"
+	      "\n"
+	      "[b]\n"
+	      "value = 2\n");
 }
 
 TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {

@@ -94,6 +94,14 @@ void config_save(AppState &app) {
 	}
 
 	TomlWriter w;
+	if(fs::exists(g_configFile)) {
+		TomlReader existing;
+		if(existing.load(g_configFile)) {
+			w.load(existing.document());
+		} else {
+			log_error("Failed to preserve existing config comments: {}", g_configFile.string());
+		}
+	}
 
 	w.section("database");
 	w.write("path", app.config.database.path.string());
