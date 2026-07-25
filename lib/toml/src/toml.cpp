@@ -235,7 +235,7 @@ private:
 			auto [entry, inserted] =
 				m_current->table.try_emplace(std::move(key), std::move(value));
 			if (!inserted) return false;
-			m_statement_value = &entry->second;
+			m_statement_value = &entry.value();
 			return true;
 		}
 		return insert_value(
@@ -544,9 +544,8 @@ private:
 	void mark_inline(TomlValue &value) {
 		if (value.type != TomlValue::Type::Table) return;
 		value.inline_table = true;
-		for (auto &[key, child] : value.table) {
-			(void)key;
-			mark_inline(child);
+		for (auto entry = value.table.begin(); entry != value.table.end(); ++entry) {
+			mark_inline(entry.value());
 		}
 	}
 
@@ -898,7 +897,7 @@ private:
 		auto [entry, was_inserted] =
 			cursor->table.try_emplace(path.back(), std::move(value));
 		if (!was_inserted) return false;
-		if (inserted) *inserted = &entry->second;
+		if (inserted) *inserted = &entry.value();
 		return true;
 	}
 };
@@ -1033,34 +1032,35 @@ static bool contains_name(
 }
 
 static void move_entries_before(
-	OrderedMap<std::string, TomlValue> &entries,
+	TomlTable &entries,
 	const std::vector<std::string> &names,
 	std::string_view anchor)
 {
 	if (names.empty()) return;
 
-	OrderedMap<std::string, TomlValue> reordered;
+	TomlTable reordered;
 	reordered.reserve(entries.size());
 	bool inserted = false;
-	for (auto &[key, value] : entries) {
+	for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+		const auto &key = entry.key();
 		if (!inserted && key == anchor) {
 			for (const auto &name : names) {
-				const auto pending = entries.find(name);
+				auto pending = entries.find(name);
 				if (pending != entries.end()) {
-					reordered.try_emplace(pending->first, std::move(pending->second));
+					reordered.try_emplace(pending.key(), std::move(pending.value()));
 				}
 			}
 			inserted = true;
 		}
 		if (!contains_name(names, key)) {
-			reordered.try_emplace(key, std::move(value));
+			reordered.try_emplace(key, std::move(entry.value()));
 		}
 	}
 	if (!inserted) {
 		for (const auto &name : names) {
-			const auto pending = entries.find(name);
+			auto pending = entries.find(name);
 			if (pending != entries.end()) {
-				reordered.try_emplace(pending->first, std::move(pending->second));
+				reordered.try_emplace(pending.key(), std::move(pending.value()));
 			}
 		}
 	}

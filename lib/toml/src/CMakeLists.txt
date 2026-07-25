@@ -13,3 +13,6 @@ target_compile_features(ModPileToml PUBLIC
 target_include_directories(ModPileToml PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_link_libraries(ModPileToml PUBLIC
+	tsl::ordered_map
+)

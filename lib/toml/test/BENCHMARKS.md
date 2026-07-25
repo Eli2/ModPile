@@ -50,6 +50,6 @@ cg_annotate --auto=yes \
 ```
 
 Compare results only from the same build type and machine. The wide-table and
-many-section sizes guard the scaling of `OrderedMap` lookup, parser insertion,
+many-section sizes guard the scaling of `TomlTable` lookup, parser insertion,
 and repeated writer updates while serialization continues to exercise ordered
 vector iteration.

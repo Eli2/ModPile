@@ -7,7 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -15,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-#include "ordered_map.h"
+#include <tsl/ordered_map.h>
 
 struct TomlComment {
 	std::string text; // Text after '#', excluding the line ending.
@@ -35,6 +37,35 @@ enum class TomlValueFormat {
 	FloatScientificUpper,
 	FloatCompact
 };
+
+struct TomlValue;
+
+struct TomlStringHash {
+	using is_transparent = void;
+
+	size_t operator()(std::string_view value) const noexcept {
+		size_t hash = sizeof(size_t) == 8
+			? static_cast<size_t>(14695981039346656037ull)
+			: static_cast<size_t>(2166136261u);
+		const size_t prime = sizeof(size_t) == 8
+			? static_cast<size_t>(1099511628211ull)
+			: static_cast<size_t>(16777619u);
+		for (const unsigned char byte : value) {
+			hash ^= byte;
+			hash *= prime;
+		}
+		return hash;
+	}
+};
+
+using TomlTableStorage = std::vector<std::pair<std::string, TomlValue>>;
+using TomlTable = tsl::ordered_map<
+	std::string,
+	TomlValue,
+	TomlStringHash,
+	std::equal_to<>,
+	std::allocator<std::pair<std::string, TomlValue>>,
+	TomlTableStorage>;
 
 struct TomlValue {
 	enum class Type {
@@ -58,7 +89,7 @@ struct TomlValue {
 	double      f = 0; // Float
 	bool        b = false; // Bool
 	std::vector<TomlValue> array;
-	OrderedMap<std::string, TomlValue> table;
+	TomlTable table;
 	TomlValueFormat format = TomlValueFormat::Plain;
 	size_t format_width = 0; // Minimum digits for non-decimal integers.
 	std::vector<TomlComment> leading_comments;
@@ -77,17 +108,17 @@ struct TomlValue {
 };
 
 inline TomlValue *TomlValue::find(std::string_view key) noexcept {
-	const auto value = table.find(key);
-	return value == table.end() ? nullptr : &value->second;
+	auto value = table.find(key);
+	return value == table.end() ? nullptr : &value.value();
 }
 
 inline const TomlValue *TomlValue::find(std::string_view key) const noexcept {
 	const auto value = table.find(key);
-	return value == table.end() ? nullptr : &value->second;
+	return value == table.end() ? nullptr : &value.value();
 }
 
 inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
-	return table.try_emplace(std::move(key), std::move(value)).first->second;
+	return table.try_emplace(std::move(key), std::move(value)).first.value();
 }
 
 struct TomlDocument {
