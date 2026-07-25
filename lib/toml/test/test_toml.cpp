@@ -27,7 +27,7 @@ TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
 		text = "hello"
 		integer = -42
 		hex_lower = 0x2a
-		hex_upper = 0XCAFE
+		hex_upper = 0xCAFE
 		fraction = -12.5
 		exponent = 5e+2
 		enabled = true
@@ -106,6 +106,37 @@ TEST_CASE("TOML reader handles whitespace CRLF and comments", "[toml][reader]") 
 	CHECK(reader.get_bool("spaced", "flag") == true);
 }
 
+TEST_CASE("TOML reader preserves value section and comment order", "[toml][reader]") {
+	auto reader = read_toml(
+		"# document comment\n"
+		"root = 1 # trailing root comment\n"
+		"[z]\n"
+		"first = true\n"
+		"second = false\n"
+		"# section comment\n"
+		"[a]\n"
+		"value = \"last\"\n");
+
+	const auto &document = reader.document();
+	REQUIRE(document.root.table.size() == 3);
+	CHECK(document.root.table[0].first == "root");
+	CHECK(document.root.table[1].first == "z");
+	CHECK(document.root.table[2].first == "a");
+	REQUIRE(document.root.table[1].second.table.size() == 2);
+	CHECK(document.root.table[1].second.table[0].first == "first");
+	CHECK(document.root.table[1].second.table[1].first == "second");
+
+	REQUIRE(document.comments.size() == 3);
+	CHECK(document.comments[0].text == " document comment");
+	CHECK_FALSE(document.comments[0].trailing);
+	CHECK(document.comments[1].text == " trailing root comment");
+	CHECK(document.comments[1].trailing);
+	CHECK(document.comments[2].text == " section comment");
+	CHECK(document.comments[0].line == 1);
+	CHECK(document.comments[1].line == 2);
+	CHECK(document.comments[2].line == 6);
+}
+
 TEST_CASE("TOML reader decodes supported basic-string escapes", "[toml][reader]") {
 	auto reader = read_toml(
 		R"([strings]
@@ -142,8 +173,8 @@ TEST_CASE("TOML reader handles signed values exponents and negative zero", "[tom
 	CHECK(std::signbit(*negative_zero));
 }
 
-TEST_CASE("TOML reader skips malformed and out-of-scope input", "[toml][reader]") {
-	auto reader = read_toml(R"(
+TEST_CASE("TOML reader rejects malformed input as a complete document", "[toml][reader]") {
+	std::istringstream input(R"(
 		root = 1
 		broken section
 		[valid]
@@ -155,14 +186,8 @@ TEST_CASE("TOML reader skips malformed and out-of-scope input", "[toml][reader]"
 		bad_boolean = TRUE
 		good = 9
 	)");
-
-	CHECK_FALSE(reader.get_integer("", "root"));
-	CHECK_FALSE(reader.get_integer("valid", ""));
-	CHECK_FALSE(reader.get_string("valid", "unterminated"));
-	CHECK_FALSE(reader.get_integer("valid", "bad_integer"));
-	CHECK_FALSE(reader.get_float("valid", "bad_float"));
-	CHECK_FALSE(reader.get_bool("valid", "bad_boolean"));
-	CHECK(reader.get_integer("valid", "good") == 9);
+	TomlReader reader;
+	CHECK_FALSE(reader.load(input));
 }
 
 TEST_CASE("TOML reader separates sections and missing values", "[toml][reader]") {

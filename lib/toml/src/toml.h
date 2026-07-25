@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -11,31 +12,79 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
-// Minimal TOML subset: flat bare key/value pairs grouped into [sections].
-// Supported values: basic strings, decimal/hex integers, decimal floats, bools.
-// Write order is explicit (caller-controlled); read tolerates any order.
-
 struct TomlValue {
-	enum class Type { String, Integer, Float, Bool };
+	enum class Type {
+		String,
+		Integer,
+		Float,
+		Bool,
+		DateTime,
+		DateTimeLocal,
+		DateLocal,
+		TimeLocal,
+		Array,
+		Table
+	};
+
+	explicit TomlValue(Type value_type = Type::Table) : type(value_type) {}
+
 	Type        type;
-	std::string str;   // String
+	std::string str;   // String and date/time values
 	int64_t     i = 0; // Integer
 	double      f = 0; // Float
 	bool        b = false; // Bool
+	std::vector<TomlValue> array;
+	std::vector<std::pair<std::string, TomlValue>> table;
+
+	// Parser metadata used to enforce TOML's table-definition rules.
+	bool explicit_table = false;
+	bool dotted_table = false;
+	bool inline_table = false;
+	bool array_of_tables = false;
+
+	TomlValue *find(std::string_view key) noexcept;
+	const TomlValue *find(std::string_view key) const noexcept;
+	TomlValue &insert(std::string key, TomlValue value);
 };
 
-struct TomlEntry {
-	std::string section;
-	std::string key;
-	TomlValue   value;
+inline TomlValue *TomlValue::find(std::string_view key) noexcept {
+	for (auto &[candidate, value] : table) {
+		if (candidate == key) return &value;
+	}
+	return nullptr;
+}
+
+inline const TomlValue *TomlValue::find(std::string_view key) const noexcept {
+	for (const auto &[candidate, value] : table) {
+		if (candidate == key) return &value;
+	}
+	return nullptr;
+}
+
+inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
+	table.emplace_back(std::move(key), std::move(value));
+	return table.back().second;
+}
+
+struct TomlComment {
+	std::string text; // Text after '#', excluding the line ending.
+	size_t offset = 0;
+	size_t line = 1;
+	size_t column = 1;
+	bool trailing = false;
+};
+
+struct TomlDocument {
+	TomlValue root{TomlValue::Type::Table};
+	std::vector<TomlComment> comments;
 };
 
 class TomlReader {
 public:
-	// Parse TOML. Returns false on I/O error; syntax errors are skipped.
+	// Parse a complete TOML 1.0 document. Returns false on I/O or syntax error.
 	bool load(std::istream &input);
 	bool load(const std::filesystem::path &path);
 
@@ -44,8 +93,7 @@ public:
 	std::optional<double>      get_float  (std::string_view section, std::string_view key) const;
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
 
-	const std::vector<std::string> &sections() const noexcept { return m_sections; }
-	const std::vector<TomlEntry> &entries() const noexcept { return m_entries; }
+	const TomlDocument &document() const noexcept { return m_document; }
 
 	bool get(std::string &value, std::string_view section, std::string_view key) const;
 	bool get(std::filesystem::path &value, std::string_view section, std::string_view key) const;
@@ -80,10 +128,7 @@ public:
 	}
 
 private:
-	// key = "section.key"
-	std::unordered_map<std::string, TomlValue> m_values;
-	std::vector<std::string> m_sections;
-	std::vector<TomlEntry> m_entries;
+	TomlDocument m_document;
 
 	const TomlValue *find(std::string_view section, std::string_view key) const;
 };

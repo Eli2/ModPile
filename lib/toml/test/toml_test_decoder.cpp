@@ -5,7 +5,6 @@
 #include <charconv>
 #include <cmath>
 #include <iostream>
-#include <map>
 #include <string>
 #include <string_view>
 
@@ -55,7 +54,38 @@ std::string float_string(double value) {
 	return {buffer, result.ptr};
 }
 
-void write_tagged_value(std::ostream &output, const TomlValue &value) {
+void write_value(std::ostream &output, const TomlValue &value);
+
+void write_table(std::ostream &output, const TomlValue &value) {
+	output.put('{');
+	bool first = true;
+	for (const auto &[key, child] : value.table) {
+		if (!first) output.put(',');
+		first = false;
+		write_json_string(output, key);
+		output.put(':');
+		write_value(output, child);
+	}
+	output.put('}');
+}
+
+void write_value(std::ostream &output, const TomlValue &value) {
+	if (value.type == TomlValue::Type::Table) {
+		write_table(output, value);
+		return;
+	}
+	if (value.type == TomlValue::Type::Array) {
+		output.put('[');
+		bool first = true;
+		for (const auto &element : value.array) {
+			if (!first) output.put(',');
+			first = false;
+			write_value(output, element);
+		}
+		output.put(']');
+		return;
+	}
+
 	output << R"({"type":")";
 	switch (value.type) {
 		case TomlValue::Type::String:
@@ -72,6 +102,25 @@ void write_tagged_value(std::ostream &output, const TomlValue &value) {
 		case TomlValue::Type::Bool:
 			output << R"(bool","value":")" << (value.b ? "true" : "false") << '"';
 			break;
+		case TomlValue::Type::DateTime:
+			output << R"(datetime","value":)";
+			write_json_string(output, value.str);
+			break;
+		case TomlValue::Type::DateTimeLocal:
+			output << R"(datetime-local","value":)";
+			write_json_string(output, value.str);
+			break;
+		case TomlValue::Type::DateLocal:
+			output << R"(date-local","value":)";
+			write_json_string(output, value.str);
+			break;
+		case TomlValue::Type::TimeLocal:
+			output << R"(time-local","value":)";
+			write_json_string(output, value.str);
+			break;
+		case TomlValue::Type::Array:
+		case TomlValue::Type::Table:
+			break;
 	}
 	output.put('}');
 }
@@ -85,37 +134,7 @@ int main() {
 		return 1;
 	}
 
-	using Table = std::map<std::string, TomlValue>;
-	std::map<std::string, Table> tables;
-	for (const auto &section : reader.sections()) {
-		tables.try_emplace(section);
-	}
-	for (const auto &entry : reader.entries()) {
-		tables[entry.section][entry.key] = entry.value;
-	}
-
-	std::cout.put('{');
-	bool first_table = true;
-	for (const auto &[section, values] : tables) {
-		if (!first_table) {
-			std::cout.put(',');
-		}
-		first_table = false;
-		write_json_string(std::cout, section);
-		std::cout << ":{";
-
-		bool first_value = true;
-		for (const auto &[key, value] : values) {
-			if (!first_value) {
-				std::cout.put(',');
-			}
-			first_value = false;
-			write_json_string(std::cout, key);
-			std::cout.put(':');
-			write_tagged_value(std::cout, value);
-		}
-		std::cout.put('}');
-	}
-	std::cout << "}\n";
+	write_table(std::cout, reader.document().root);
+	std::cout.put('\n');
 	return std::cout ? 0 : 1;
 }

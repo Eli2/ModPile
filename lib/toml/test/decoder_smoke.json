@@ -1,1 +1,1 @@
-{"values":{"enabled":{"type":"bool","value":"true"},"fraction":{"type":"float","value":"1.25"},"integer":{"type":"integer","value":"-42"},"text":{"type":"string","value":"hello"}}}
+{"values":{"text":{"type":"string","value":"hello"},"integer":{"type":"integer","value":"-42"},"fraction":{"type":"float","value":"1.25"},"enabled":{"type":"bool","value":"true"}}}
