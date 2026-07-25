@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Eli2
 #include "toml.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <format>
@@ -52,6 +53,8 @@ bool TomlReader::load(const std::filesystem::path &path) {
 
 bool TomlReader::load(std::istream &input) {
 	m_values.clear();
+	m_sections.clear();
+	m_entries.clear();
 	std::string section;
 	std::string line;
 	while (std::getline(input, line)) {
@@ -69,6 +72,10 @@ bool TomlReader::load(std::istream &input) {
 				continue;
 			}
 			section = std::string(trim(sv.substr(1, close - 1)));
+			if (!section.empty() &&
+			    std::find(m_sections.begin(), m_sections.end(), section) == m_sections.end()) {
+				m_sections.push_back(section);
+			}
 			continue;
 		}
 
@@ -163,6 +170,7 @@ bool TomlReader::load(std::istream &input) {
 		}
 
 		m_values[make_key(section, key)] = val;
+		m_entries.push_back({section, key, std::move(val)});
 	}
 	return !input.bad();
 }

@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <concepts>
+#include <cstdint>
 #include <filesystem>
 #include <iosfwd>
 #include <optional>
@@ -26,6 +27,12 @@ struct TomlValue {
 	bool        b = false; // Bool
 };
 
+struct TomlEntry {
+	std::string section;
+	std::string key;
+	TomlValue   value;
+};
+
 class TomlReader {
 public:
 	// Parse TOML. Returns false on I/O error; syntax errors are skipped.
@@ -36,6 +43,9 @@ public:
 	std::optional<int64_t>     get_integer(std::string_view section, std::string_view key) const;
 	std::optional<double>      get_float  (std::string_view section, std::string_view key) const;
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
+
+	const std::vector<std::string> &sections() const noexcept { return m_sections; }
+	const std::vector<TomlEntry> &entries() const noexcept { return m_entries; }
 
 	bool get(std::string &value, std::string_view section, std::string_view key) const;
 	bool get(std::filesystem::path &value, std::string_view section, std::string_view key) const;
@@ -72,6 +82,8 @@ public:
 private:
 	// key = "section.key"
 	std::unordered_map<std::string, TomlValue> m_values;
+	std::vector<std::string> m_sections;
+	std::vector<TomlEntry> m_entries;
 
 	const TomlValue *find(std::string_view section, std::string_view key) const;
 };
