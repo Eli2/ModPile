@@ -35,6 +35,28 @@ const std::string &TomlValue::text() const {
 
 namespace {
 
+bool is_explicit_table(const TomlValue &value) {
+	return value.format == TomlValueFormat::TableExplicit;
+}
+
+bool is_implicit_table(const TomlValue &value) {
+	return value.format == TomlValueFormat::TableImplicit;
+}
+
+bool is_dotted_table(const TomlValue &value) {
+	return value.format == TomlValueFormat::TableDotted ||
+	       value.format == TomlValueFormat::TableInlineDotted;
+}
+
+bool is_inline_table(const TomlValue &value) {
+	return value.format == TomlValueFormat::TableInline ||
+	       value.format == TomlValueFormat::TableInlineDotted;
+}
+
+bool is_array_of_tables(const TomlValue &value) {
+	return value.format == TomlValueFormat::ArrayOfTables;
+}
+
 bool valid_utf8(std::string_view text) {
 	for (size_t i = 0; i < text.size();) {
 		const auto c = static_cast<unsigned char>(text[i]);
@@ -106,7 +128,7 @@ public:
 	Parser(std::string_view input, TomlDocument &document)
 		: m_input(input), m_document(document), m_current(&document.root) {
 		m_document.root = TomlValue{TomlTable{}};
-		m_document.root.explicit_table = true;
+		m_document.root.format = TomlValueFormat::TableExplicit;
 	}
 
 	bool parse() {
@@ -522,7 +544,7 @@ private:
 				return false;
 			}
 			if (peek() == ']') {
-				value.array_trailing_comma = true;
+				value.format = TomlValueFormat::ArrayTrailingComma;
 				value.dangling_comments = std::move(pending);
 				advance();
 				return true;
@@ -532,7 +554,7 @@ private:
 
 	bool parse_inline_table(TomlValue &value) {
 		value = TomlValue{TomlTable{}};
-		value.inline_table = true;
+		value.format = TomlValueFormat::TableInline;
 		advance();
 		skip_spaces();
 		if (peek() == '}') {
@@ -563,7 +585,9 @@ private:
 
 	void mark_inline(TomlValue &value) {
 		if (!value.is<TomlTable>()) return;
-		value.inline_table = true;
+		value.format = is_dotted_table(value)
+			? TomlValueFormat::TableInlineDotted
+			: TomlValueFormat::TableInline;
 		for (auto entry = value.table().begin(); entry != value.table().end(); ++entry) {
 			mark_inline(entry.value());
 		}
@@ -844,15 +868,15 @@ private:
 		if (array) {
 			if (!child) {
 				TomlValue list{TomlArray{}};
-				list.array_of_tables = true;
+				list.format = TomlValueFormat::ArrayOfTables;
 				child = &table->insert(name, std::move(list));
 			}
 			if (!child->is<TomlArray>() ||
-			    !child->array_of_tables) {
+			    !is_array_of_tables(*child)) {
 				return false;
 			}
 			TomlValue element{TomlTable{}};
-			element.explicit_table = true;
+			element.format = TomlValueFormat::TableExplicit;
 			child->array().push_back(std::move(element));
 			m_current = &child->array().back();
 			return true;
@@ -860,14 +884,16 @@ private:
 
 		if (!child) {
 			TomlValue new_table{TomlTable{}};
-			new_table.explicit_table = true;
+			new_table.format = TomlValueFormat::TableExplicit;
 			child = &table->insert(name, std::move(new_table));
 		} else {
 			if (!child->is<TomlTable>() ||
-			    child->explicit_table || child->dotted_table || child->inline_table) {
+			    is_explicit_table(*child) ||
+			    is_dotted_table(*child) ||
+			    is_inline_table(*child)) {
 				return false;
 			}
-			child->explicit_table = true;
+			child->format = TomlValueFormat::TableExplicit;
 		}
 		m_current = child;
 		return true;
@@ -876,13 +902,15 @@ private:
 	TomlValue *descend_header(TomlValue &table, const std::string &name) {
 		auto *child = table.find(name);
 		if (!child) {
-			child = &table.insert(name, TomlValue{TomlTable{}});
+			TomlValue implicit_table{TomlTable{}};
+			implicit_table.format = TomlValueFormat::TableImplicit;
+			child = &table.insert(name, std::move(implicit_table));
 		}
 		if (child->is<TomlTable>()) {
-			if (child->inline_table) return nullptr;
+			if (is_inline_table(*child)) return nullptr;
 			return child;
 		}
-		if (child->is<TomlArray>() && child->array_of_tables &&
+		if (child->is<TomlArray>() && is_array_of_tables(*child) &&
 		    !child->array().empty() &&
 		    child->array().back().is<TomlTable>()) {
 			return &child->array().back();
@@ -903,14 +931,15 @@ private:
 			auto *child = cursor->find(path[i]);
 			if (!child) {
 				TomlValue new_table{TomlTable{}};
-				new_table.dotted_table = true;
-				new_table.inline_table = in_inline;
+				new_table.format = in_inline
+					? TomlValueFormat::TableInlineDotted
+					: TomlValueFormat::TableDotted;
 				auto &inserted = cursor->insert(path[i], std::move(new_table));
 				child = &inserted;
 			}
 			if (!child->is<TomlTable>() ||
-			    child->explicit_table ||
-			    (child->inline_table && !child->dotted_table)) {
+			    is_explicit_table(*child) ||
+			    (is_inline_table(*child) && !is_dotted_table(*child))) {
 				return false;
 			}
 			cursor = child;
@@ -1117,7 +1146,7 @@ void TomlWriter::section(std::string_view name) {
 	auto *value = toml_document.root.find(name);
 	if (!value) {
 		TomlValue table{TomlTable{}};
-		table.explicit_table = true;
+		table.format = TomlValueFormat::TableExplicit;
 		toml_document.root.insert(std::string(name), std::move(table));
 		if (!contains_name(m_seen_sections, name)) {
 			m_seen_sections.emplace_back(name);
@@ -1343,16 +1372,36 @@ static void append_trailing_comment(
 		static_cast<std::streamsize>(comment->text.size()));
 }
 
+static void serialize_inline_table_entries(
+	std::ostream &output,
+	const TomlValue &table,
+	std::vector<std::string> &path,
+	bool &first)
+{
+	for (const auto &[key, child] : table.table()) {
+		path.push_back(key);
+		if (child.format == TomlValueFormat::TableInlineDotted) {
+			serialize_inline_table_entries(output, child, path, first);
+			path.pop_back();
+			continue;
+		}
+		if (!first) output.write(", ", 2);
+		first = false;
+		for (size_t i = 0; i < path.size(); ++i) {
+			if (i > 0) output.put('.');
+			serialize_key(output, path[i]);
+		}
+		output.write(" = ", 3);
+		serialize_value(output, child);
+		path.pop_back();
+	}
+}
+
 static void serialize_inline_table(std::ostream &output, const TomlValue &value) {
 	output.put('{');
 	bool first = true;
-	for (const auto &[key, child] : value.table()) {
-		if (!first) output.write(", ", 2);
-		first = false;
-		serialize_key(output, key);
-		output.write(" = ", 3);
-		serialize_value(output, child);
-	}
+	std::vector<std::string> path;
+	serialize_inline_table_entries(output, value, path, first);
 	output.put('}');
 }
 
@@ -1393,7 +1442,8 @@ static void serialize_value(std::ostream &output, const TomlValue &value) {
 				append_comments(output, element.leading_comments, "  ");
 				output.write("  ", 2);
 				serialize_value(output, element);
-				if (i + 1 < value.array().size() || value.array_trailing_comma) {
+				if (i + 1 < value.array().size() ||
+				    value.format == TomlValueFormat::ArrayTrailingComma) {
 					output.put(',');
 				}
 				append_trailing_comment(output, element.trailing_comment);
@@ -1408,7 +1458,7 @@ static void serialize_value(std::ostream &output, const TomlValue &value) {
 			if (i > 0) output.write(", ", 2);
 			serialize_value(output, value.array()[i]);
 		}
-		if (value.array_trailing_comma) output.put(',');
+		if (value.format == TomlValueFormat::ArrayTrailingComma) output.put(',');
 		output.put(']');
 		return;
 	}
@@ -1416,7 +1466,7 @@ static void serialize_value(std::ostream &output, const TomlValue &value) {
 }
 
 static bool is_table_array(const TomlValue &value) {
-	return value.is<TomlArray>() && value.array_of_tables;
+	return value.is<TomlArray>() && is_array_of_tables(value);
 }
 
 static void serialize_path(
@@ -1433,17 +1483,6 @@ static void append_blank_line(std::ostream &output, bool has_output) {
 	if (has_output) output.put('\n');
 }
 
-static bool has_direct_values(const TomlValue &table) {
-	return std::any_of(
-		table.table().begin(),
-		table.table().end(),
-		[](const std::pair<std::string, TomlValue> &entry) {
-			const auto &value = entry.second;
-			return (!value.is<TomlTable>() || value.inline_table) &&
-			       !is_table_array(value);
-		});
-}
-
 static void serialize_dotted_assignments(
 	std::ostream &output,
 	bool &has_output,
@@ -1453,8 +1492,8 @@ static void serialize_dotted_assignments(
 	for (const auto &[key, value] : table.table()) {
 		auto dotted_path = prefix;
 		dotted_path.push_back(key);
-		if (value.is<TomlTable>() && !value.inline_table) {
-			if (value.dotted_table) {
+		if (value.is<TomlTable>() && !is_inline_table(value)) {
+			if (is_dotted_table(value)) {
 				serialize_dotted_assignments(
 					output,
 					has_output,
@@ -1490,14 +1529,13 @@ static void serialize_child_tables(
 	for (const auto &[key, value] : table.table()) {
 		auto child_path = path;
 		child_path.push_back(key);
-		if (value.is<TomlTable>() && !value.inline_table) {
-			if (value.dotted_table) {
+		if (value.is<TomlTable>() && !is_inline_table(value)) {
+			if (is_dotted_table(value)) {
 				serialize_child_tables(output, has_output, value, child_path);
 				continue;
 			}
 			const bool needs_header =
-				value.explicit_table ||
-				has_direct_values(value);
+				!is_implicit_table(value);
 			if (needs_header) {
 				append_blank_line(output, has_output);
 				append_comments(output, value.leading_comments);
@@ -1532,8 +1570,8 @@ static void serialize_table_contents(
 	const std::vector<std::string> &path)
 {
 	for (const auto &[key, value] : table.table()) {
-		if (value.is<TomlTable>() && !value.inline_table) {
-			if (value.dotted_table) {
+		if (value.is<TomlTable>() && !is_inline_table(value)) {
+			if (is_dotted_table(value)) {
 				serialize_dotted_assignments(
 					output,
 					has_output,

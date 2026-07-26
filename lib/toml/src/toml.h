@@ -32,7 +32,14 @@ enum class TomlValueFormat {
 	IntegerBinary,
 	FloatScientificLower,
 	FloatScientificUpper,
-	FloatCompact
+	FloatCompact,
+	TableImplicit,
+	TableExplicit,
+	TableDotted,
+	TableInline,
+	TableInlineDotted,
+	ArrayOfTables,
+	ArrayTrailingComma
 };
 
 struct TomlValue;
@@ -126,13 +133,6 @@ struct TomlValue {
 	std::vector<TomlComment> leading_comments;
 	std::optional<TomlComment> trailing_comment;
 	std::vector<TomlComment> dangling_comments;
-
-	// Parser metadata used to enforce TOML's table-definition rules.
-	bool explicit_table = false;
-	bool dotted_table = false;
-	bool inline_table = false;
-	bool array_of_tables = false;
-	bool array_trailing_comma = false;
 
 	TomlValue *find(std::string_view key) noexcept;
 	const TomlValue *find(std::string_view key) const noexcept;

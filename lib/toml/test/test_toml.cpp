@@ -370,6 +370,11 @@ TEST_CASE("TOML table formats preserve their spelling", "[toml][writer][table]")
 			"point = {x = 1, y = 2, metadata = {label = \"origin\"}}\n");
 	}
 
+	SECTION("dotted keys within inline tables remain dotted") {
+		check_round_trip(
+			"point = {position.x = 1, position.y = 2}\n");
+	}
+
 	SECTION("arrays of inline tables remain value arrays") {
 		check_round_trip(
 			"points = [{x = 1, y = 2}, {x = 3, y = 4}]\n");
@@ -419,6 +424,73 @@ TEST_CASE("TOML table formats preserve their spelling", "[toml][writer][table]")
 			"[\"fruit.with.dot\".\"physical color\"]\n"
 			"shape = \"round\"\n");
 	}
+}
+
+TEST_CASE("TOML value formats encode table and array syntax states", "[toml][format]") {
+	auto document = read_toml(
+		"[explicit]\n"
+		"dotted.value = 1\n"
+		"inline = {nested.value = 2}\n"
+		"plain_array = [1, 2]\n"
+		"trailing_array = [1, 2,]\n"
+		"\n"
+		"[[items]]\n"
+		"name = \"first\"\n"
+		"\n"
+		"[implicit.child]\n");
+
+	CHECK(document.root.format == TomlValueFormat::TableExplicit);
+	const auto *explicit_table = document.root.find("explicit");
+	REQUIRE(explicit_table);
+	CHECK(explicit_table->format == TomlValueFormat::TableExplicit);
+
+	const auto *dotted_table = explicit_table->find("dotted");
+	REQUIRE(dotted_table);
+	CHECK(dotted_table->format == TomlValueFormat::TableDotted);
+
+	const auto *inline_table = explicit_table->find("inline");
+	REQUIRE(inline_table);
+	CHECK(inline_table->format == TomlValueFormat::TableInline);
+	const auto *inline_dotted_table = inline_table->find("nested");
+	REQUIRE(inline_dotted_table);
+	CHECK(inline_dotted_table->format == TomlValueFormat::TableInlineDotted);
+
+	REQUIRE(explicit_table->find("plain_array"));
+	CHECK(explicit_table->find("plain_array")->format == TomlValueFormat::Plain);
+	REQUIRE(explicit_table->find("trailing_array"));
+	CHECK(
+		explicit_table->find("trailing_array")->format ==
+		TomlValueFormat::ArrayTrailingComma);
+
+	const auto *items = document.root.find("items");
+	REQUIRE(items);
+	CHECK(items->format == TomlValueFormat::ArrayOfTables);
+	REQUIRE(items->array().size() == 1);
+	CHECK(items->array().front().format == TomlValueFormat::TableExplicit);
+
+	const auto *implicit_table = document.root.find("implicit");
+	REQUIRE(implicit_table);
+	CHECK(implicit_table->format == TomlValueFormat::TableImplicit);
+	REQUIRE(implicit_table->find("child"));
+	CHECK(
+		implicit_table->find("child")->format ==
+		TomlValueFormat::TableExplicit);
+}
+
+TEST_CASE("TOML serializer writes programmatic empty tables", "[toml][format]") {
+	TomlDocument document;
+	document.root.insert("empty", TomlValue{TomlTable{}});
+
+	TomlValue outer{TomlTable{}};
+	outer.insert("inner", TomlValue{TomlTable{}});
+	document.root.insert("outer", std::move(outer));
+
+	CHECK(toml::to_string(document) ==
+	      "[empty]\n"
+	      "\n"
+	      "[outer]\n"
+	      "\n"
+	      "[outer.inner]\n");
 }
 
 TEST_CASE("TOML comments preserve their attachment and spelling", "[toml][writer][comment]") {
