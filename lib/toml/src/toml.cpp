@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <sstream>
 
 std::string &TomlValue::text() {
 	if (auto *value = std::get_if<std::string>(&data)) return *value;
@@ -1126,30 +1127,27 @@ void TomlWriter::section(std::string_view name) {
 	m_current_section = std::string(name);
 }
 
-static std::string escape_string(std::string_view s) {
-	std::string out;
-	out.reserve(s.size() + 2);
-	out += '"';
-	for (const unsigned char c : s) {
+static void serialize_string(std::ostream &output, std::string_view value) {
+	output.put('"');
+	for (const unsigned char c : value) {
 		switch (c) {
-			case '\b': out += "\\b";  break;
-			case '\f': out += "\\f";  break;
-			case '"':  out += "\\\""; break;
-			case '\\': out += "\\\\"; break;
-			case '\n': out += "\\n";  break;
-			case '\r': out += "\\r";  break;
-			case '\t': out += "\\t";  break;
+			case '\b': output.write("\\b", 2);  break;
+			case '\f': output.write("\\f", 2);  break;
+			case '"':  output.write("\\\"", 2); break;
+			case '\\': output.write("\\\\", 2); break;
+			case '\n': output.write("\\n", 2);  break;
+			case '\r': output.write("\\r", 2);  break;
+			case '\t': output.write("\\t", 2);  break;
 			default:
 				if (c < 0x20 || c == 0x7f) {
-					out += std::format("\\u{:04X}", c);
+					output << std::format("\\u{:04X}", c);
 				} else {
-					out += static_cast<char>(c);
+					output.put(static_cast<char>(c));
 				}
 				break;
 		}
 	}
-	out += '"';
-	return out;
+	output.put('"');
 }
 
 void TomlWriter::write(std::string_view key, std::string_view value) {
@@ -1226,12 +1224,13 @@ void TomlWriter::write_value(std::string_view key, TomlValue value) {
 
 // ─── TOML serialization ──────────────────────────────────────────────────────
 
-static std::string serialize_key(std::string_view key) {
+static void serialize_key(std::ostream &output, std::string_view key) {
 	if (!key.empty() &&
 	    std::all_of(key.begin(), key.end(), [](char c) { return is_bare_key_char(c); })) {
-		return std::string(key);
+		output.write(key.data(), static_cast<std::streamsize>(key.size()));
+		return;
 	}
-	return escape_string(key);
+	serialize_string(output, key);
 }
 
 static std::string serialize_integer(const TomlValue &value) {
@@ -1311,54 +1310,68 @@ static std::string serialize_float(const TomlValue &toml_value) {
 	return output;
 }
 
-static std::string serialize_value(const TomlValue &value);
+static void serialize_value(std::ostream &output, const TomlValue &value);
 
 static void append_comments(
-	std::string &output,
+	std::ostream &output,
 	const std::vector<TomlComment> &comments,
 	std::string_view indentation = {})
 {
 	for (const auto &comment : comments) {
-		output.append(indentation);
-		output += '#';
-		output += comment.text;
-		output += '\n';
+		output.write(indentation.data(), static_cast<std::streamsize>(indentation.size()));
+		output.put('#');
+		output.write(comment.text.data(), static_cast<std::streamsize>(comment.text.size()));
+		output.put('\n');
 	}
 }
 
 static void append_trailing_comment(
-	std::string &output,
+	std::ostream &output,
 	const std::optional<TomlComment> &comment)
 {
 	if (!comment) return;
-	output += " #";
-	output += comment->text;
+	output.write(" #", 2);
+	output.write(
+		comment->text.data(),
+		static_cast<std::streamsize>(comment->text.size()));
 }
 
-static std::string serialize_inline_table(const TomlValue &value) {
-	std::string output = "{";
+static void serialize_inline_table(std::ostream &output, const TomlValue &value) {
+	output.put('{');
 	bool first = true;
 	for (const auto &[key, child] : value.table()) {
-		if (!first) output += ", ";
+		if (!first) output.write(", ", 2);
 		first = false;
-		output += serialize_key(key);
-		output += " = ";
-		output += serialize_value(child);
+		serialize_key(output, key);
+		output.write(" = ", 3);
+		serialize_value(output, child);
 	}
-	output += '}';
-	return output;
+	output.put('}');
 }
 
-static std::string serialize_value(const TomlValue &value) {
-	if (value.is<std::string>()) return escape_string(value.text());
-	if (value.is<int64_t>()) return serialize_integer(value);
-	if (value.is<double>()) return serialize_float(value);
-	if (value.is<bool>()) return value.boolean() ? "true" : "false";
+static void serialize_value(std::ostream &output, const TomlValue &value) {
+	if (value.is<std::string>()) {
+		serialize_string(output, value.text());
+		return;
+	}
+	if (value.is<int64_t>()) {
+		output << serialize_integer(value);
+		return;
+	}
+	if (value.is<double>()) {
+		output << serialize_float(value);
+		return;
+	}
+	if (value.is<bool>()) {
+		output << (value.boolean() ? "true" : "false");
+		return;
+	}
 	if (value.is<TomlOffsetDateTime>() ||
 	    value.is<TomlLocalDateTime>() ||
 	    value.is<TomlLocalDate>() ||
 	    value.is<TomlLocalTime>()) {
-		return value.text();
+		output << value.text();
+		return;
 	}
 	if (value.is<TomlArray>()) {
 		const bool has_comments =
@@ -1367,52 +1380,52 @@ static std::string serialize_value(const TomlValue &value) {
 				return !element.leading_comments.empty() || element.trailing_comment.has_value();
 			});
 		if (has_comments) {
-			std::string output = "[\n";
+			output.write("[\n", 2);
 			for (size_t i = 0; i < value.array().size(); ++i) {
 				const auto &element = value.array()[i];
 				append_comments(output, element.leading_comments, "  ");
-				output += "  ";
-				output += serialize_value(element);
-				if (i + 1 < value.array().size()) output += ',';
+				output.write("  ", 2);
+				serialize_value(output, element);
+				if (i + 1 < value.array().size()) output.put(',');
 				append_trailing_comment(output, element.trailing_comment);
-				output += '\n';
+				output.put('\n');
 			}
 			append_comments(output, value.dangling_comments, "  ");
-			output += ']';
-			return output;
+			output.put(']');
+			return;
 		}
-		std::string output = "[";
+		output.put('[');
 		for (size_t i = 0; i < value.array().size(); ++i) {
-			if (i > 0) output += ", ";
-			output += serialize_value(value.array()[i]);
+			if (i > 0) output.write(", ", 2);
+			serialize_value(output, value.array()[i]);
 		}
-		output += ']';
-		return output;
+		output.put(']');
+		return;
 	}
-	return serialize_inline_table(value);
+	serialize_inline_table(output, value);
 }
 
 static bool is_table_array(const TomlValue &value) {
 	return value.is<TomlArray>() && value.array_of_tables;
 }
 
-static std::string serialize_path(const std::vector<std::string> &path) {
-	std::string output;
+static void serialize_path(
+	std::ostream &output,
+	const std::vector<std::string> &path)
+{
 	for (size_t i = 0; i < path.size(); ++i) {
-		if (i > 0) output += '.';
-		output += serialize_key(path[i]);
+		if (i > 0) output.put('.');
+		serialize_key(output, path[i]);
 	}
-	return output;
 }
 
-static void append_blank_line(std::string &output) {
-	if (output.empty()) return;
-	if (output.back() != '\n') output += '\n';
-	if (output.size() < 2 || output[output.size() - 2] != '\n') output += '\n';
+static void append_blank_line(std::ostream &output, bool has_output) {
+	if (has_output) output.put('\n');
 }
 
 static void serialize_table_contents(
-	std::string &output,
+	std::ostream &output,
+	bool &has_output,
 	const TomlValue &table,
 	const std::vector<std::string> &path)
 {
@@ -1420,66 +1433,66 @@ static void serialize_table_contents(
 		if (value.is<TomlTable>() && !value.inline_table) continue;
 		if (is_table_array(value)) continue;
 		append_comments(output, value.leading_comments);
-		output += serialize_key(key);
-		output += " = ";
-		output += serialize_value(value);
+		serialize_key(output, key);
+		output.write(" = ", 3);
+		serialize_value(output, value);
 		append_trailing_comment(output, value.trailing_comment);
-		output += '\n';
+		output.put('\n');
+		has_output = true;
 	}
 
 	for (const auto &[key, value] : table.table()) {
 		auto child_path = path;
 		child_path.push_back(key);
 		if (value.is<TomlTable>() && !value.inline_table) {
-			append_blank_line(output);
+			append_blank_line(output, has_output);
 			append_comments(output, value.leading_comments);
-			output += '[';
-			output += serialize_path(child_path);
-			output += ']';
+			output.put('[');
+			serialize_path(output, child_path);
+			output.put(']');
 			append_trailing_comment(output, value.trailing_comment);
-			output += '\n';
-			serialize_table_contents(output, value, child_path);
+			output.put('\n');
+			has_output = true;
+			serialize_table_contents(output, has_output, value, child_path);
 		} else if (is_table_array(value)) {
 			for (const auto &element : value.array()) {
-				append_blank_line(output);
+				append_blank_line(output, has_output);
 				append_comments(output, element.leading_comments);
-				output += "[[";
-				output += serialize_path(child_path);
-				output += "]]";
+				output.write("[[", 2);
+				serialize_path(output, child_path);
+				output.write("]]", 2);
 				append_trailing_comment(output, element.trailing_comment);
-				output += '\n';
-				serialize_table_contents(output, element, child_path);
+				output.put('\n');
+				has_output = true;
+				serialize_table_contents(output, has_output, element, child_path);
 			}
 		}
 	}
 }
 
 std::string toml::to_string(const TomlDocument &document) {
-	std::string output;
-	serialize_table_contents(output, document.root, {});
-	append_comments(output, document.trailing_comments);
-	return output;
+	std::ostringstream output;
+	to_stream(document, output);
+	return std::move(output).str();
 }
 
 bool toml::to_file(
 	const TomlDocument &document,
 	const std::filesystem::path &path)
 {
-	const auto serialized = to_string(document);
 	std::ofstream f(path, std::ios::out | std::ios::binary);
 	if (!f) return false;
-	f.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
-	if (!f.good()) return false;
+	const bool serialized = to_stream(document, f);
 	f.close();
-	if (!f) return false;
-	return true;
+	return serialized && f.good();
 }
 
 bool toml::to_stream(
 	const TomlDocument &document,
 	std::ostream &output)
 {
-	const auto serialized = to_string(document);
-	output.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
+	bool has_output = false;
+	serialize_table_contents(output, has_output, document.root, {});
+	append_comments(output, document.trailing_comments);
 	return output.good();
 }
