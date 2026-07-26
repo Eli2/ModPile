@@ -20,6 +20,14 @@ TomlDocument read_toml(std::string_view text) {
 	return std::move(*document);
 }
 
+void check_round_trip(std::string_view text) {
+	auto document = read_toml(text);
+	const auto serialized = toml::to_string(document);
+	CHECK(serialized == text);
+	auto reparsed = read_toml(serialized);
+	CHECK(toml::to_string(reparsed) == text);
+}
+
 } // namespace
 
 TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
@@ -335,6 +343,82 @@ TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]")
 	      "float_plain = 12.5\n"
 	      "float_lower = 5e+02\n"
 	      "float_upper = -2E-02\n");
+}
+
+TEST_CASE("TOML table formats preserve their spelling", "[toml][writer][table]") {
+	SECTION("standard and nested tables") {
+		check_round_trip(
+			"[database]\n"
+			"server = \"db.example.com\"\n"
+			"\n"
+			"[database.connection]\n"
+			"enabled = true\n"
+			"\n"
+			"[database.connection.tls]\n"
+			"version = \"1.3\"\n");
+	}
+
+	SECTION("dotted keys remain dotted keys") {
+		check_round_trip(
+			"fruit.name = \"apple\"\n"
+			"fruit.physical.color = \"red\"\n"
+			"fruit.physical.shape = \"round\"\n");
+	}
+
+	SECTION("inline tables remain inline") {
+		check_round_trip(
+			"point = {x = 1, y = 2, metadata = {label = \"origin\"}}\n");
+	}
+
+	SECTION("arrays of inline tables remain value arrays") {
+		check_round_trip(
+			"points = [{x = 1, y = 2}, {x = 3, y = 4}]\n");
+	}
+
+	SECTION("explicit empty tables are preserved") {
+		check_round_trip(
+			"[empty]\n"
+			"\n"
+			"[nested.empty]\n");
+	}
+
+	SECTION("arrays of tables") {
+		check_round_trip(
+			"[[products]]\n"
+			"name = \"Hammer\"\n"
+			"sku = 738594937\n"
+			"\n"
+			"[[products]]\n"
+			"name = \"Nail\"\n"
+			"sku = 284758393\n");
+	}
+
+	SECTION("nested tables and arrays within table-array elements") {
+		check_round_trip(
+			"[[fruits]]\n"
+			"name = \"apple\"\n"
+			"\n"
+			"[fruits.physical]\n"
+			"color = \"red\"\n"
+			"\n"
+			"[[fruits.varieties]]\n"
+			"name = \"red delicious\"\n"
+			"\n"
+			"[[fruits.varieties]]\n"
+			"name = \"granny smith\"\n"
+			"\n"
+			"[[fruits]]\n"
+			"name = \"banana\"\n"
+			"\n"
+			"[[fruits.varieties]]\n"
+			"name = \"plantain\"\n");
+	}
+
+	SECTION("quoted table path components") {
+		check_round_trip(
+			"[\"fruit.with.dot\".\"physical color\"]\n"
+			"shape = \"round\"\n");
+	}
 }
 
 TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {

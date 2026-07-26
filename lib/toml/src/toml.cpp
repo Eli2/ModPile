@@ -1423,36 +1423,81 @@ static void append_blank_line(std::ostream &output, bool has_output) {
 	if (has_output) output.put('\n');
 }
 
-static void serialize_table_contents(
+static bool has_direct_values(const TomlValue &table) {
+	return std::any_of(
+		table.table().begin(),
+		table.table().end(),
+		[](const std::pair<std::string, TomlValue> &entry) {
+			const auto &value = entry.second;
+			return (!value.is<TomlTable>() || value.inline_table) &&
+			       !is_table_array(value);
+		});
+}
+
+static void serialize_dotted_assignments(
 	std::ostream &output,
 	bool &has_output,
 	const TomlValue &table,
-	const std::vector<std::string> &path)
+	const std::vector<std::string> &prefix)
 {
 	for (const auto &[key, value] : table.table()) {
-		if (value.is<TomlTable>() && !value.inline_table) continue;
+		auto dotted_path = prefix;
+		dotted_path.push_back(key);
+		if (value.is<TomlTable>() && !value.inline_table) {
+			if (value.dotted_table) {
+				serialize_dotted_assignments(
+					output,
+					has_output,
+					value,
+					dotted_path);
+			}
+			continue;
+		}
 		if (is_table_array(value)) continue;
+
 		append_comments(output, value.leading_comments);
-		serialize_key(output, key);
+		serialize_path(output, dotted_path);
 		output.write(" = ", 3);
 		serialize_value(output, value);
 		append_trailing_comment(output, value.trailing_comment);
 		output.put('\n');
 		has_output = true;
 	}
+}
 
+static void serialize_table_contents(
+	std::ostream &output,
+	bool &has_output,
+	const TomlValue &table,
+	const std::vector<std::string> &path);
+
+static void serialize_child_tables(
+	std::ostream &output,
+	bool &has_output,
+	const TomlValue &table,
+	const std::vector<std::string> &path)
+{
 	for (const auto &[key, value] : table.table()) {
 		auto child_path = path;
 		child_path.push_back(key);
 		if (value.is<TomlTable>() && !value.inline_table) {
-			append_blank_line(output, has_output);
-			append_comments(output, value.leading_comments);
-			output.put('[');
-			serialize_path(output, child_path);
-			output.put(']');
-			append_trailing_comment(output, value.trailing_comment);
-			output.put('\n');
-			has_output = true;
+			if (value.dotted_table) {
+				serialize_child_tables(output, has_output, value, child_path);
+				continue;
+			}
+			const bool needs_header =
+				value.explicit_table ||
+				has_direct_values(value);
+			if (needs_header) {
+				append_blank_line(output, has_output);
+				append_comments(output, value.leading_comments);
+				output.put('[');
+				serialize_path(output, child_path);
+				output.put(']');
+				append_trailing_comment(output, value.trailing_comment);
+				output.put('\n');
+				has_output = true;
+			}
 			serialize_table_contents(output, has_output, value, child_path);
 		} else if (is_table_array(value)) {
 			for (const auto &element : value.array()) {
@@ -1468,6 +1513,35 @@ static void serialize_table_contents(
 			}
 		}
 	}
+}
+
+static void serialize_table_contents(
+	std::ostream &output,
+	bool &has_output,
+	const TomlValue &table,
+	const std::vector<std::string> &path)
+{
+	for (const auto &[key, value] : table.table()) {
+		if (value.is<TomlTable>() && !value.inline_table) {
+			if (value.dotted_table) {
+				serialize_dotted_assignments(
+					output,
+					has_output,
+					value,
+					{key});
+			}
+			continue;
+		}
+		if (is_table_array(value)) continue;
+		append_comments(output, value.leading_comments);
+		serialize_key(output, key);
+		output.write(" = ", 3);
+		serialize_value(output, value);
+		append_trailing_comment(output, value.trailing_comment);
+		output.put('\n');
+		has_output = true;
+	}
+	serialize_child_tables(output, has_output, table, path);
 }
 
 std::string toml::to_string(const TomlDocument &document) {
