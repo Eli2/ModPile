@@ -170,6 +170,7 @@ public:
 	std::optional<double>      get_float  (std::string_view section, std::string_view key) const;
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
 
+	TomlDocument &document() noexcept { return m_document; }
 	const TomlDocument &document() const noexcept { return m_document; }
 	std::string_view error_message() const noexcept { return m_error_message; }
 
@@ -212,9 +213,22 @@ private:
 	const TomlValue *find(std::string_view section, std::string_view key) const;
 };
 
+namespace toml {
+
+// Convert a complete document to canonical TOML.
+std::string to_string(const TomlDocument &document);
+bool to_stream(const TomlDocument &document, std::ostream &output);
+bool to_file(
+		const TomlDocument &document,
+		const std::filesystem::path &path);
+
+} // namespace toml
+
 class TomlWriter {
 public:
-	void load(const TomlDocument &document);
+	TomlWriter() = default;
+	explicit TomlWriter(TomlDocument &document) noexcept
+		: m_document(std::ref(document)) {}
 
 	// Section/key write methods — output order matches call order.
 	void section(std::string_view name);
@@ -224,7 +238,8 @@ public:
 	void write(std::string_view key, double             value);
 	void write(std::string_view key, bool               value);
 
-	const TomlDocument &document() const noexcept { return m_document; }
+	TomlDocument &document() noexcept;
+	const TomlDocument &document() const noexcept;
 
 	template<std::integral T>
 		requires (!std::same_as<std::remove_cv_t<T>, bool>)
@@ -243,10 +258,6 @@ public:
 		write(key, static_cast<double>(value));
 	}
 
-	// Serialise to a stream or file. Returns false on error.
-	bool save(std::ostream &output) const;
-	bool save(const std::filesystem::path &path) const;
-
 private:
 	struct SectionWriteOrder {
 		std::string name;
@@ -254,13 +265,12 @@ private:
 		std::vector<std::string> pending_keys;
 	};
 
-	TomlDocument         m_document;
+	std::variant<TomlDocument, std::reference_wrapper<TomlDocument>> m_document;
 	std::optional<std::string> m_current_section;
 	std::vector<std::string> m_seen_sections;
 	std::vector<std::string> m_pending_sections;
 	std::vector<SectionWriteOrder> m_section_write_order;
 
-	std::string render() const;
 	void write_value(std::string_view key, TomlValue value);
 	SectionWriteOrder &write_order_for(std::string_view section);
 };

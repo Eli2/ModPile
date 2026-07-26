@@ -75,10 +75,8 @@ size_t parse_once(std::string_view source) {
 }
 
 size_t serialize_once(const TomlDocument &document) {
-	TomlWriter writer;
-	writer.load(document);
 	std::ostringstream output;
-	if (!writer.save(output)) return 0;
+	if (!toml::to_stream(document, output)) return 0;
 	return output.view().size();
 }
 
@@ -95,8 +93,8 @@ size_t update_once(
 	const TomlDocument &document,
 	const std::vector<std::string> &keys)
 {
-	TomlWriter writer;
-	writer.load(document);
+	auto mutable_document = document;
+	TomlWriter writer(mutable_document);
 	writer.section("values");
 	for (size_t i = 0; i < keys.size(); ++i) {
 		writer.write(keys[i], static_cast<int64_t>(i + 1));

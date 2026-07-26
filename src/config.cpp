@@ -93,15 +93,16 @@ void config_save(AppState &app) {
 		fs::create_directories(parent);
 	}
 
-	TomlWriter w;
+	TomlDocument document;
 	if(fs::exists(g_configFile)) {
 		TomlReader existing;
 		if(existing.load(g_configFile)) {
-			w.load(existing.document());
+			document = std::move(existing.document());
 		} else {
 			log_error("Failed to preserve existing config comments: {}", g_configFile.string());
 		}
 	}
+	TomlWriter w(document);
 
 	w.section("database");
 	w.write("path", app.config.database.path.string());
@@ -129,7 +130,7 @@ void config_save(AppState &app) {
 	w.write("mid2",    equalizer.mid2_db);
 	w.write("high",    equalizer.high_db);
 	
-	if(!w.save(g_configFile)) {
+	if(!toml::to_file(document, g_configFile)) {
 		log_error("Failed to write config file: {}", g_configFile.string());
 	}
 }

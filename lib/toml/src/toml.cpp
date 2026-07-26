@@ -1048,6 +1048,16 @@ bool TomlReader::get(
 
 // ─── TomlWriter ──────────────────────────────────────────────────────────────
 
+TomlDocument &TomlWriter::document() noexcept {
+	if (auto *owned = std::get_if<TomlDocument>(&m_document)) return *owned;
+	return std::get<std::reference_wrapper<TomlDocument>>(m_document).get();
+}
+
+const TomlDocument &TomlWriter::document() const noexcept {
+	if (const auto *owned = std::get_if<TomlDocument>(&m_document)) return *owned;
+	return std::get<std::reference_wrapper<TomlDocument>>(m_document).get();
+}
+
 static bool contains_name(
 	const std::vector<std::string> &names,
 	std::string_view name)
@@ -1092,11 +1102,12 @@ static void move_entries_before(
 }
 
 void TomlWriter::section(std::string_view name) {
-	auto *value = m_document.root.find(name);
+	auto &toml_document = document();
+	auto *value = toml_document.root.find(name);
 	if (!value) {
 		TomlValue table{TomlTable{}};
 		table.explicit_table = true;
-		m_document.root.insert(std::string(name), std::move(table));
+		toml_document.root.insert(std::string(name), std::move(table));
 		if (!contains_name(m_seen_sections, name)) {
 			m_seen_sections.emplace_back(name);
 			m_pending_sections.emplace_back(name);
@@ -1105,7 +1116,7 @@ void TomlWriter::section(std::string_view name) {
 		m_current_section.reset();
 		return;
 	} else if (!contains_name(m_seen_sections, name)) {
-		move_entries_before(m_document.root.table(), m_pending_sections, name);
+		move_entries_before(toml_document.root.table(), m_pending_sections, name);
 		m_pending_sections.clear();
 		m_seen_sections.emplace_back(name);
 	}
@@ -1171,14 +1182,6 @@ void TomlWriter::write(std::string_view key, bool value) {
 	write_value(key, std::move(toml_value));
 }
 
-void TomlWriter::load(const TomlDocument &document) {
-	m_document = document;
-	m_current_section.reset();
-	m_seen_sections.clear();
-	m_pending_sections.clear();
-	m_section_write_order.clear();
-}
-
 TomlWriter::SectionWriteOrder &TomlWriter::write_order_for(
 	std::string_view section)
 {
@@ -1193,7 +1196,7 @@ TomlWriter::SectionWriteOrder &TomlWriter::write_order_for(
 
 void TomlWriter::write_value(std::string_view key, TomlValue value) {
 	if (!m_current_section) return;
-	auto *section_value = m_document.root.find(*m_current_section);
+	auto *section_value = document().root.find(*m_current_section);
 	if (!section_value || !section_value->is<TomlTable>()) return;
 
 	auto &order = write_order_for(*m_current_section);
@@ -1217,6 +1220,8 @@ void TomlWriter::write_value(std::string_view key, TomlValue value) {
 	}
 	section_value->insert(std::string(key), std::move(value));
 }
+
+// ─── TOML serialization ──────────────────────────────────────────────────────
 
 static std::string serialize_key(std::string_view key) {
 	if (!key.empty() &&
@@ -1446,30 +1451,32 @@ static void serialize_table_contents(
 	}
 }
 
-static std::string serialize_document(const TomlDocument &document) {
+std::string toml::to_string(const TomlDocument &document) {
 	std::string output;
 	serialize_table_contents(output, document.root, {});
 	append_comments(output, document.trailing_comments);
 	return output;
 }
 
-std::string TomlWriter::render() const {
-	return serialize_document(m_document);
-}
-
-bool TomlWriter::save(const std::filesystem::path &path) const {
-	const auto document = render();
+bool toml::to_file(
+	const TomlDocument &document,
+	const std::filesystem::path &path)
+{
+	const auto serialized = to_string(document);
 	std::ofstream f(path, std::ios::out | std::ios::binary);
 	if (!f) return false;
-	f.write(document.data(), static_cast<std::streamsize>(document.size()));
+	f.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
 	if (!f.good()) return false;
 	f.close();
 	if (!f) return false;
 	return true;
 }
 
-bool TomlWriter::save(std::ostream &output) const {
-	const auto document = render();
-	output.write(document.data(), static_cast<std::streamsize>(document.size()));
+bool toml::to_stream(
+	const TomlDocument &document,
+	std::ostream &output)
+{
+	const auto serialized = to_string(document);
+	output.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
 	return output.good();
 }

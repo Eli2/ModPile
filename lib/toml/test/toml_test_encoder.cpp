@@ -290,9 +290,7 @@ int main() {
 		return 1;
 	}
 
-	TomlWriter writer;
-	writer.load(document);
-	if (!writer.save(std::cout)) {
+	if (!toml::to_stream(document, std::cout)) {
 		std::cerr << "failed to write TOML output\n";
 		return 1;
 	}

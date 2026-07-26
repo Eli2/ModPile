@@ -257,7 +257,7 @@ TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writ
 	writer.write("disabled", false);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "[first]\n"
 	      "text = \"hello\"\n"
@@ -268,6 +268,20 @@ TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writ
 	      "\n"
 	      "[second]\n"
 	      "disabled = false\n");
+}
+
+TEST_CASE("TOML writer can update a referenced document", "[toml][writer]") {
+	TomlDocument document;
+	TomlWriter writer(document);
+	writer.section("settings");
+	writer.write("enabled", true);
+
+	CHECK(&writer.document() == &document);
+	REQUIRE(document.root.find("settings"));
+	CHECK(document.root.find("settings")->find("enabled")->boolean());
+	CHECK(toml::to_string(document) ==
+	      "[settings]\n"
+	      "enabled = true\n");
 }
 
 TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]") {
@@ -281,11 +295,10 @@ TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]")
 		"float_plain = 12.5\n"
 		"float_lower = 5e+2\n"
 		"float_upper = -2E-2\n");
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "[numbers]\n"
 	      "decimal = 42\n"
@@ -325,13 +338,12 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 	values.insert("nested", std::move(nested));
 	document.root.insert("values", std::move(values));
 
-	TomlWriter writer;
-	writer.load(document);
+	TomlWriter writer(document);
 	REQUIRE(writer.document().root.table().begin()->first == "title");
 	REQUIRE(std::next(writer.document().root.table().begin())->first == "values");
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "# generated document\n"
 	      "title = \"demo\"\n"
@@ -357,7 +369,7 @@ TEST_CASE("TOML writer escapes basic strings and round-trips them", "[toml][writ
 	writer.write("value", expected);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() == "[strings]\nvalue = \"quote \\\" slash \\\\ newline\\n tab\\t carriage\\r\"\n");
 	std::istringstream input(output.str());
 	TomlReader reader;
@@ -375,14 +387,13 @@ TEST_CASE("TOML writer preserves parsed comments and unknown values", "[toml][wr
 		"[library]\n"
 		"paths = [\"~/Music\", \"/mnt/modules\"]\n";
 	auto reader = read_toml(original);
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	writer.section("player");
 	writer.write("gain", 0.75);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "# Personal settings; keep this comment\n"
 	      "[player] # playback controls\n"
@@ -395,14 +406,13 @@ TEST_CASE("TOML writer preserves parsed comments and unknown values", "[toml][wr
 
 TEST_CASE("TOML writer canonicalizes newlines and appends missing keys", "[toml][writer]") {
 	auto reader = read_toml("[player]\r\ngain = 1\r\n\r\n[other]\r\nvalue = true\r\n");
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	writer.section("player");
 	writer.write("stereo_width", 0.5);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "[player]\n"
 	      "gain = 1\n"
@@ -414,8 +424,7 @@ TEST_CASE("TOML writer canonicalizes newlines and appends missing keys", "[toml]
 
 TEST_CASE("TOML writer updates its loaded document deterministically", "[toml][writer]") {
 	auto reader = read_toml("[player]\ngain = 1.0\n");
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	writer.section("player");
 	writer.write("gain", 0.75);
@@ -423,8 +432,8 @@ TEST_CASE("TOML writer updates its loaded document deterministically", "[toml][w
 
 	std::ostringstream first;
 	std::ostringstream second;
-	REQUIRE(writer.save(first));
-	REQUIRE(writer.save(second));
+	REQUIRE(toml::to_stream(writer.document(), first));
+	REQUIRE(toml::to_stream(writer.document(), second));
 	CHECK(first.str() == "[player]\ngain = 0.5\n");
 	CHECK(second.str() == first.str());
 }
@@ -440,7 +449,7 @@ TEST_CASE("TOML writer replaces a file from its supplied document", "[toml][writ
 	TomlWriter writer;
 	writer.section("player");
 	writer.write("gain", 0.25);
-	REQUIRE(writer.save(path));
+	REQUIRE(toml::to_file(writer.document(), path));
 
 	std::ifstream file(path, std::ios::binary);
 	REQUIRE(file);
@@ -459,8 +468,7 @@ TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]
 		"\n"
 		"[c]\n"
 		"value = 3\n");
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	writer.section("a");
 	writer.write("value", 10);
@@ -470,7 +478,7 @@ TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]
 	writer.write("value", 30);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "[a]\n"
 	      "value = 10\n"
@@ -485,8 +493,7 @@ TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]
 TEST_CASE("TOML writer inserts missing values without reordering existing values", "[toml][writer]") {
 	SECTION("a missing value is inserted before the next modeled value") {
 		auto reader = read_toml("[values]\nvalA = 1\nvalC = 3\n");
-		TomlWriter writer;
-		writer.load(reader.document());
+		TomlWriter writer(reader.document());
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -494,7 +501,7 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 		writer.write("valC", 30);
 
 		std::ostringstream output;
-		REQUIRE(writer.save(output));
+		REQUIRE(toml::to_stream(writer.document(), output));
 		CHECK(output.str() ==
 		      "[values]\n"
 		      "valA = 10\n"
@@ -504,8 +511,7 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 
 	SECTION("manual ordering is preserved and a trailing value stays trailing") {
 		auto reader = read_toml("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
-		TomlWriter writer;
-		writer.load(reader.document());
+		TomlWriter writer(reader.document());
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -514,7 +520,7 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 		writer.write("valD", 40);
 
 		std::ostringstream output;
-		REQUIRE(writer.save(output));
+		REQUIRE(toml::to_stream(writer.document(), output));
 		CHECK(output.str() ==
 		      "[values]\n"
 		      "valB = 20\n"
@@ -537,8 +543,7 @@ TEST_CASE("TOML writer keeps structured comments attached while updating", "[tom
 		"# section c line 2\n"
 		"[c] # inline section c\n"
 		"value = 3 # inline value in c\n");
-	TomlWriter writer;
-	writer.load(reader.document());
+	TomlWriter writer(reader.document());
 
 	writer.section("a");
 	writer.write("valA", 10);
@@ -550,7 +555,7 @@ TEST_CASE("TOML writer keeps structured comments attached while updating", "[tom
 	writer.write("value", 300);
 
 	std::ostringstream output;
-	REQUIRE(writer.save(output));
+	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() ==
 	      "# section a\n"
 	      "[a] # inline section a\n"
@@ -580,5 +585,5 @@ TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {
 	writer.section("section");
 	std::ostringstream output;
 	output.setstate(std::ios::badbit);
-	CHECK_FALSE(writer.save(output));
+	CHECK_FALSE(toml::to_stream(writer.document(), output));
 }
