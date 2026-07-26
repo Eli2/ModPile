@@ -5,3 +5,4 @@
 struct AppState;
 
 void gui_player(AppState &app);
+void gui_rating(AppState &app);

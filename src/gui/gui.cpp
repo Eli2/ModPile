@@ -98,7 +98,12 @@ void gui_iterate(AppState &app) {
 				ImGuiID leftBottom;
 				ImGui::DockBuilderSplitNode(rootLeft, ImGuiDir_Down, 0.4f, &leftBottom, &leftTop);
 
-				ImGui::DockBuilderDockWindow("Player", leftTop);
+				ImGuiID player;
+				ImGuiID rating;
+				ImGui::DockBuilderSplitNode(leftTop, ImGuiDir_Down, 0.2f, &rating, &player);
+
+				ImGui::DockBuilderDockWindow("Player", player);
+				ImGui::DockBuilderDockWindow("Rating", rating);
 
 				ImGui::DockBuilderDockWindow("Task", leftBottom);
 				ImGui::DockBuilderDockWindow("Config", leftBottom);
@@ -118,6 +123,7 @@ void gui_iterate(AppState &app) {
 
 	gui_menu(app);
 	gui_player(app);
+	gui_rating(app);
 	gui_pile(app);
 	gui_playlist(app);
 	gui_charts(app);

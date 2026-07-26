@@ -180,3 +180,50 @@ void gui_player(AppState &app) {
 	}
 	ImGui::End();
 }
+
+void gui_rating(AppState &app) {
+	ImGui::Begin(
+		"Rating",
+		nullptr,
+		ImGuiWindowFlags_NoCollapse |
+		ImGuiWindowFlags_AlwaysAutoResize
+	);
+
+	const bool hasTrack = !app.player.track.id.get().empty();
+	const long currentRating = app.player.track.rating.load();
+
+	ImGui::BeginDisabled(!hasTrack);
+	for(long rating = 0; rating <= 9; ++rating) {
+		if(rating > 0)
+			ImGui::SameLine();
+
+		const bool selected = currentRating == rating;
+		if(selected) {
+			ImGui::PushStyleColor(
+				ImGuiCol_Button,
+				ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+		}
+
+		const std::string label = std::to_string(rating) + "##rating";
+		if(ImGui::Button(label.c_str())) {
+			app.player.request.rating = rating;
+			app.player.track.rating = rating;
+		}
+
+		if(selected)
+			ImGui::PopStyleColor();
+	}
+
+	if(ImGui::Button("Mark as trash")) {
+		app.player.request.trash = true;
+		app.player.request.commands.push(AppState::Player::Request::Command::Next);
+	}
+	ImGui::EndDisabled();
+
+	if(!hasTrack) {
+		ImGui::SameLine();
+		ImGui::TextDisabled("No track playing");
+	}
+
+	ImGui::End();
+}
