@@ -12,68 +12,22 @@
 #include <iterator>
 #include <limits>
 
-static TomlValueData make_toml_value_data(TomlValue::Type value_type) {
-	using Type = TomlValue::Type;
-	switch (value_type) {
-		case Type::String:
-			return TomlValueData{std::in_place_type<std::string>};
-		case Type::Integer:
-			return TomlValueData{std::in_place_type<int64_t>};
-		case Type::Float:
-			return TomlValueData{std::in_place_type<double>};
-		case Type::Bool:
-			return TomlValueData{std::in_place_type<bool>};
-		case Type::DateTime:
-			return TomlValueData{std::in_place_type<TomlOffsetDateTime>};
-		case Type::DateTimeLocal:
-			return TomlValueData{std::in_place_type<TomlLocalDateTime>};
-		case Type::DateLocal:
-			return TomlValueData{std::in_place_type<TomlLocalDate>};
-		case Type::TimeLocal:
-			return TomlValueData{std::in_place_type<TomlLocalTime>};
-		case Type::Array:
-			return TomlValueData{std::in_place_type<TomlArray>};
-		case Type::Table:
-			return TomlValueData{std::in_place_type<TomlTable>};
-	}
-	std::abort();
-}
-
-TomlValue::TomlValue(Type value_type)
-	: data(make_toml_value_data(value_type)) {}
-
 std::string &TomlValue::text() {
-	switch (type()) {
-		case Type::String:
-			return std::get<std::string>(data);
-		case Type::DateTime:
-			return std::get<TomlOffsetDateTime>(data).value;
-		case Type::DateTimeLocal:
-			return std::get<TomlLocalDateTime>(data).value;
-		case Type::DateLocal:
-			return std::get<TomlLocalDate>(data).value;
-		case Type::TimeLocal:
-			return std::get<TomlLocalTime>(data).value;
-		default:
-			throw std::bad_variant_access{};
-	}
+	if (auto *value = std::get_if<std::string>(&data)) return *value;
+	if (auto *value = std::get_if<TomlOffsetDateTime>(&data)) return value->value;
+	if (auto *value = std::get_if<TomlLocalDateTime>(&data)) return value->value;
+	if (auto *value = std::get_if<TomlLocalDate>(&data)) return value->value;
+	if (auto *value = std::get_if<TomlLocalTime>(&data)) return value->value;
+	throw std::bad_variant_access{};
 }
 
 const std::string &TomlValue::text() const {
-	switch (type()) {
-		case Type::String:
-			return std::get<std::string>(data);
-		case Type::DateTime:
-			return std::get<TomlOffsetDateTime>(data).value;
-		case Type::DateTimeLocal:
-			return std::get<TomlLocalDateTime>(data).value;
-		case Type::DateLocal:
-			return std::get<TomlLocalDate>(data).value;
-		case Type::TimeLocal:
-			return std::get<TomlLocalTime>(data).value;
-		default:
-			throw std::bad_variant_access{};
-	}
+	if (const auto *value = std::get_if<std::string>(&data)) return *value;
+	if (const auto *value = std::get_if<TomlOffsetDateTime>(&data)) return value->value;
+	if (const auto *value = std::get_if<TomlLocalDateTime>(&data)) return value->value;
+	if (const auto *value = std::get_if<TomlLocalDate>(&data)) return value->value;
+	if (const auto *value = std::get_if<TomlLocalTime>(&data)) return value->value;
+	throw std::bad_variant_access{};
 }
 
 // ─── TomlReader ──────────────────────────────────────────────────────────────
@@ -150,7 +104,7 @@ class Parser {
 public:
 	Parser(std::string_view input, TomlDocument &document)
 		: m_input(input), m_document(document), m_current(&document.root) {
-		m_document.root = TomlValue{TomlValue::Type::Table};
+		m_document.root = TomlValue{TomlTable{}};
 		m_document.root.explicit_table = true;
 	}
 
@@ -349,11 +303,11 @@ private:
 	bool parse_value(TomlValue &value) {
 		if (eof()) return false;
 		if (peek() == '"') {
-			value = TomlValue{TomlValue::Type::String};
+			value = TomlValue{std::string{}};
 			return parse_basic_string(value.text(), true);
 		}
 		if (peek() == '\'') {
-			value = TomlValue{TomlValue::Type::String};
+			value = TomlValue{std::string{}};
 			return parse_literal_string(value.text(), true);
 		}
 		if (peek() == '[') return parse_array(value);
@@ -542,7 +496,7 @@ private:
 	}
 
 	bool parse_array(TomlValue &value) {
-		value = TomlValue{TomlValue::Type::Array};
+		value = TomlValue{TomlArray{}};
 		advance();
 		std::vector<TomlComment> pending;
 		if (!skip_array_space(value, nullptr, pending, false)) return false;
@@ -575,7 +529,7 @@ private:
 	}
 
 	bool parse_inline_table(TomlValue &value) {
-		value = TomlValue{TomlValue::Type::Table};
+		value = TomlValue{TomlTable{}};
 		value.inline_table = true;
 		advance();
 		skip_spaces();
@@ -606,7 +560,7 @@ private:
 	}
 
 	void mark_inline(TomlValue &value) {
-		if (value.type() != TomlValue::Type::Table) return;
+		if (!value.is<TomlTable>()) return;
 		value.inline_table = true;
 		for (auto entry = value.table().begin(); entry != value.table().end(); ++entry) {
 			mark_inline(entry.value());
@@ -626,7 +580,7 @@ private:
 		}
 		if (token.empty() || token.front() == ' ' || token.front() == '\t') return false;
 		if (token == "true" || token == "false") {
-			value = TomlValue{TomlValue::Type::Bool};
+			value = TomlValue{false};
 			value.boolean() = token == "true";
 			return true;
 		}
@@ -656,7 +610,7 @@ private:
 		if (starts_date) {
 			if (!valid_date(year, month, day)) return false;
 			if (token.size() == 10) {
-				value = TomlValue{TomlValue::Type::DateLocal};
+				value = TomlValue{TomlLocalDate{}};
 				value.text() = token;
 				return true;
 			}
@@ -664,8 +618,9 @@ private:
 			size_t end = 0;
 			bool offset = false;
 			if (!valid_time(token, 11, end, offset) || end != token.size()) return false;
-			value = TomlValue{
-				offset ? TomlValue::Type::DateTime : TomlValue::Type::DateTimeLocal};
+			value = offset
+				? TomlValue{TomlOffsetDateTime{}}
+				: TomlValue{TomlLocalDateTime{}};
 			value.text() = token;
 			return true;
 		}
@@ -673,7 +628,7 @@ private:
 		size_t end = 0;
 		bool offset = false;
 		if (valid_time(token, 0, end, offset) && end == token.size() && !offset) {
-			value = TomlValue{TomlValue::Type::TimeLocal};
+			value = TomlValue{TomlLocalTime{}};
 			value.text() = token;
 			return true;
 		}
@@ -726,7 +681,7 @@ private:
 		}
 		const auto body = token.substr(pos);
 		if (body == "inf" || body == "nan") {
-			value = TomlValue{TomlValue::Type::Float};
+			value = TomlValue{double{}};
 			value.floating() = body == "inf"
 				? std::numeric_limits<double>::infinity()
 				: std::numeric_limits<double>::quiet_NaN();
@@ -746,7 +701,7 @@ private:
 			    parsed > static_cast<uint64_t>(INT64_MAX)) {
 				return false;
 			}
-			value = TomlValue{TomlValue::Type::Integer};
+			value = TomlValue{int64_t{}};
 			value.integer() = static_cast<int64_t>(parsed);
 			value.format_width = digits.size();
 			if (base == 16) {
@@ -780,7 +735,7 @@ private:
 			if (result.ec != std::errc{} || result.ptr != number.data() + number.size()) {
 				return false;
 			}
-			value = TomlValue{TomlValue::Type::Float};
+			value = TomlValue{double{}};
 			value.floating() = parsed;
 			if (body.find('E') != std::string_view::npos) {
 				value.format = TomlValueFormat::FloatScientificUpper;
@@ -797,7 +752,7 @@ private:
 		const auto result = std::from_chars(
 			number.data(), number.data() + number.size(), parsed);
 		if (result.ec != std::errc{} || result.ptr != number.data() + number.size()) return false;
-		value = TomlValue{TomlValue::Type::Integer};
+		value = TomlValue{int64_t{}};
 		value.integer() = parsed;
 		return true;
 	}
@@ -886,15 +841,15 @@ private:
 		auto *child = table->find(name);
 		if (array) {
 			if (!child) {
-				TomlValue list{TomlValue::Type::Array};
+				TomlValue list{TomlArray{}};
 				list.array_of_tables = true;
 				child = &table->insert(name, std::move(list));
 			}
-			if (child->type() != TomlValue::Type::Array ||
+			if (!child->is<TomlArray>() ||
 			    !child->array_of_tables) {
 				return false;
 			}
-			TomlValue element{TomlValue::Type::Table};
+			TomlValue element{TomlTable{}};
 			element.explicit_table = true;
 			child->array().push_back(std::move(element));
 			m_current = &child->array().back();
@@ -902,11 +857,11 @@ private:
 		}
 
 		if (!child) {
-			TomlValue new_table{TomlValue::Type::Table};
+			TomlValue new_table{TomlTable{}};
 			new_table.explicit_table = true;
 			child = &table->insert(name, std::move(new_table));
 		} else {
-			if (child->type() != TomlValue::Type::Table ||
+			if (!child->is<TomlTable>() ||
 			    child->explicit_table || child->dotted_table || child->inline_table) {
 				return false;
 			}
@@ -919,15 +874,15 @@ private:
 	TomlValue *descend_header(TomlValue &table, const std::string &name) {
 		auto *child = table.find(name);
 		if (!child) {
-			child = &table.insert(name, TomlValue{TomlValue::Type::Table});
+			child = &table.insert(name, TomlValue{TomlTable{}});
 		}
-		if (child->type() == TomlValue::Type::Table) {
+		if (child->is<TomlTable>()) {
 			if (child->inline_table) return nullptr;
 			return child;
 		}
-		if (child->type() == TomlValue::Type::Array && child->array_of_tables &&
+		if (child->is<TomlArray>() && child->array_of_tables &&
 		    !child->array().empty() &&
-		    child->array().back().type() == TomlValue::Type::Table) {
+		    child->array().back().is<TomlTable>()) {
 			return &child->array().back();
 		}
 		return nullptr;
@@ -940,18 +895,18 @@ private:
 		bool in_inline,
 		TomlValue **inserted)
 	{
-		if (path.empty() || table.type() != TomlValue::Type::Table) return false;
+		if (path.empty() || !table.is<TomlTable>()) return false;
 		TomlValue *cursor = &table;
 		for (size_t i = 0; i + 1 < path.size(); ++i) {
 			auto *child = cursor->find(path[i]);
 			if (!child) {
-				TomlValue new_table{TomlValue::Type::Table};
+				TomlValue new_table{TomlTable{}};
 				new_table.dotted_table = true;
 				new_table.inline_table = in_inline;
 				auto &inserted = cursor->insert(path[i], std::move(new_table));
 				child = &inserted;
 			}
-			if (child->type() != TomlValue::Type::Table ||
+			if (!child->is<TomlTable>() ||
 			    child->explicit_table ||
 			    (child->inline_table && !child->dotted_table)) {
 				return false;
@@ -1002,7 +957,7 @@ const TomlValue *TomlReader::find(std::string_view section, std::string_view key
 		const auto dot = section.find('.');
 		const auto part = section.substr(0, dot);
 		const auto *child = table->find(part);
-		if (!child || child->type() != TomlValue::Type::Table) {
+		if (!child || !child->is<TomlTable>()) {
 			return nullptr;
 		}
 		table = child;
@@ -1014,7 +969,7 @@ const TomlValue *TomlReader::find(std::string_view section, std::string_view key
 
 std::optional<std::string> TomlReader::get_string(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type() != TomlValue::Type::String) {
+	if (!v || !v->is<std::string>()) {
 		return std::nullopt;
 	}
 	return v->text();
@@ -1022,7 +977,7 @@ std::optional<std::string> TomlReader::get_string(std::string_view section, std:
 
 std::optional<int64_t> TomlReader::get_integer(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type() != TomlValue::Type::Integer) {
+	if (!v || !v->is<int64_t>()) {
 		return std::nullopt;
 	}
 	return v->integer();
@@ -1033,10 +988,10 @@ std::optional<double> TomlReader::get_float(std::string_view section, std::strin
 	if (!v) {
 		return std::nullopt;
 	}
-	if (v->type() == TomlValue::Type::Float) {
+	if (v->is<double>()) {
 		return v->floating();
 	}
-	if (v->type() == TomlValue::Type::Integer) {
+	if (v->is<int64_t>()) {
 		return static_cast<double>(v->integer());
 	}
 	return std::nullopt;
@@ -1044,7 +999,7 @@ std::optional<double> TomlReader::get_float(std::string_view section, std::strin
 
 std::optional<bool> TomlReader::get_bool(std::string_view section, std::string_view key) const {
 	auto *v = find(section, key);
-	if (!v || v->type() != TomlValue::Type::Bool) {
+	if (!v || !v->is<bool>()) {
 		return std::nullopt;
 	}
 	return v->boolean();
@@ -1134,14 +1089,14 @@ static void move_entries_before(
 void TomlWriter::section(std::string_view name) {
 	auto *value = m_document.root.find(name);
 	if (!value) {
-		TomlValue table{TomlValue::Type::Table};
+		TomlValue table{TomlTable{}};
 		table.explicit_table = true;
 		m_document.root.insert(std::string(name), std::move(table));
 		if (!contains_name(m_seen_sections, name)) {
 			m_seen_sections.emplace_back(name);
 			m_pending_sections.emplace_back(name);
 		}
-	} else if (value->type() != TomlValue::Type::Table) {
+	} else if (!value->is<TomlTable>()) {
 		m_current_section.reset();
 		return;
 	} else if (!contains_name(m_seen_sections, name)) {
@@ -1179,19 +1134,19 @@ static std::string escape_string(std::string_view s) {
 }
 
 void TomlWriter::write(std::string_view key, std::string_view value) {
-	TomlValue toml_value{TomlValue::Type::String};
+	TomlValue toml_value{std::string{}};
 	toml_value.text() = value;
 	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, int64_t value) {
-	TomlValue toml_value{TomlValue::Type::Integer};
+	TomlValue toml_value{int64_t{}};
 	toml_value.integer() = value;
 	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write_hex(std::string_view key, int64_t value) {
-	TomlValue toml_value{TomlValue::Type::Integer};
+	TomlValue toml_value{int64_t{}};
 	toml_value.integer() = value;
 	toml_value.format = TomlValueFormat::IntegerHexLower;
 	toml_value.format_width = 4;
@@ -1199,14 +1154,14 @@ void TomlWriter::write_hex(std::string_view key, int64_t value) {
 }
 
 void TomlWriter::write(std::string_view key, double value) {
-	TomlValue toml_value{TomlValue::Type::Float};
+	TomlValue toml_value{double{}};
 	toml_value.floating() = value;
 	toml_value.format = TomlValueFormat::FloatCompact;
 	write_value(key, std::move(toml_value));
 }
 
 void TomlWriter::write(std::string_view key, bool value) {
-	TomlValue toml_value{TomlValue::Type::Bool};
+	TomlValue toml_value{false};
 	toml_value.boolean() = value;
 	write_value(key, std::move(toml_value));
 }
@@ -1234,7 +1189,7 @@ TomlWriter::SectionWriteOrder &TomlWriter::write_order_for(
 void TomlWriter::write_value(std::string_view key, TomlValue value) {
 	if (!m_current_section) return;
 	auto *section_value = m_document.root.find(*m_current_section);
-	if (!section_value || section_value->type() != TomlValue::Type::Table) return;
+	if (!section_value || !section_value->is<TomlTable>()) return;
 
 	auto &order = write_order_for(*m_current_section);
 	const bool first_write = !contains_name(order.seen_keys, key);
@@ -1382,57 +1337,50 @@ static std::string serialize_inline_table(const TomlValue &value) {
 }
 
 static std::string serialize_value(const TomlValue &value) {
-	switch (value.type()) {
-		case TomlValue::Type::String:
-			return escape_string(value.text());
-		case TomlValue::Type::Integer:
-			return serialize_integer(value);
-		case TomlValue::Type::Float:
-			return serialize_float(value);
-		case TomlValue::Type::Bool:
-			return value.boolean() ? "true" : "false";
-		case TomlValue::Type::DateTime:
-		case TomlValue::Type::DateTimeLocal:
-		case TomlValue::Type::DateLocal:
-		case TomlValue::Type::TimeLocal:
-			return value.text();
-		case TomlValue::Type::Array: {
-			const bool has_comments =
-				!value.dangling_comments.empty() ||
-				std::any_of(value.array().begin(), value.array().end(), [](const TomlValue &element) {
-					return !element.leading_comments.empty() || element.trailing_comment.has_value();
-				});
-			if (has_comments) {
-				std::string output = "[\n";
-				for (size_t i = 0; i < value.array().size(); ++i) {
-					const auto &element = value.array()[i];
-					append_comments(output, element.leading_comments, "  ");
-					output += "  ";
-					output += serialize_value(element);
-					if (i + 1 < value.array().size()) output += ',';
-					append_trailing_comment(output, element.trailing_comment);
-					output += '\n';
-				}
-				append_comments(output, value.dangling_comments, "  ");
-				output += ']';
-				return output;
-			}
-			std::string output = "[";
+	if (value.is<std::string>()) return escape_string(value.text());
+	if (value.is<int64_t>()) return serialize_integer(value);
+	if (value.is<double>()) return serialize_float(value);
+	if (value.is<bool>()) return value.boolean() ? "true" : "false";
+	if (value.is<TomlOffsetDateTime>() ||
+	    value.is<TomlLocalDateTime>() ||
+	    value.is<TomlLocalDate>() ||
+	    value.is<TomlLocalTime>()) {
+		return value.text();
+	}
+	if (value.is<TomlArray>()) {
+		const bool has_comments =
+			!value.dangling_comments.empty() ||
+			std::any_of(value.array().begin(), value.array().end(), [](const TomlValue &element) {
+				return !element.leading_comments.empty() || element.trailing_comment.has_value();
+			});
+		if (has_comments) {
+			std::string output = "[\n";
 			for (size_t i = 0; i < value.array().size(); ++i) {
-				if (i > 0) output += ", ";
-				output += serialize_value(value.array()[i]);
+				const auto &element = value.array()[i];
+				append_comments(output, element.leading_comments, "  ");
+				output += "  ";
+				output += serialize_value(element);
+				if (i + 1 < value.array().size()) output += ',';
+				append_trailing_comment(output, element.trailing_comment);
+				output += '\n';
 			}
+			append_comments(output, value.dangling_comments, "  ");
 			output += ']';
 			return output;
 		}
-		case TomlValue::Type::Table:
-			return serialize_inline_table(value);
+		std::string output = "[";
+		for (size_t i = 0; i < value.array().size(); ++i) {
+			if (i > 0) output += ", ";
+			output += serialize_value(value.array()[i]);
+		}
+		output += ']';
+		return output;
 	}
-	return {};
+	return serialize_inline_table(value);
 }
 
 static bool is_table_array(const TomlValue &value) {
-	return value.type() == TomlValue::Type::Array && value.array_of_tables;
+	return value.is<TomlArray>() && value.array_of_tables;
 }
 
 static std::string serialize_path(const std::vector<std::string> &path) {
@@ -1456,7 +1404,7 @@ static void serialize_table_contents(
 	const std::vector<std::string> &path)
 {
 	for (const auto &[key, value] : table.table()) {
-		if (value.type() == TomlValue::Type::Table && !value.inline_table) continue;
+		if (value.is<TomlTable>() && !value.inline_table) continue;
 		if (is_table_array(value)) continue;
 		append_comments(output, value.leading_comments);
 		output += serialize_key(key);
@@ -1469,7 +1417,7 @@ static void serialize_table_contents(
 	for (const auto &[key, value] : table.table()) {
 		auto child_path = path;
 		child_path.push_back(key);
-		if (value.type() == TomlValue::Type::Table && !value.inline_table) {
+		if (value.is<TomlTable>() && !value.inline_table) {
 			append_blank_line(output);
 			append_comments(output, value.leading_comments);
 			output += '[';

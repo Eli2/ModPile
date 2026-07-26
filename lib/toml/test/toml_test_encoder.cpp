@@ -199,7 +199,7 @@ private:
 
 bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 	if (json.type == JsonValue::Type::Array) {
-		toml = TomlValue{TomlValue::Type::Array};
+		toml = TomlValue{TomlArray{}};
 		for (const auto &element : json.array) {
 			TomlValue converted;
 			if (!decode_tagged(element, converted)) return false;
@@ -219,15 +219,15 @@ bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 		const auto &kind = type->string;
 		const auto &text = value->string;
 		if (kind == "string") {
-			toml = TomlValue{TomlValue::Type::String};
+			toml = TomlValue{std::string{}};
 			toml.text() = text;
 		} else if (kind == "integer") {
-			toml = TomlValue{TomlValue::Type::Integer};
+			toml = TomlValue{int64_t{}};
 			const auto result = std::from_chars(
 				text.data(), text.data() + text.size(), toml.integer());
 			if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) return false;
 		} else if (kind == "float") {
-			toml = TomlValue{TomlValue::Type::Float};
+			toml = TomlValue{double{}};
 			if (text == "inf" || text == "+inf") {
 				toml.floating() = std::numeric_limits<double>::infinity();
 			} else if (text == "-inf") {
@@ -241,19 +241,19 @@ bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 			}
 		} else if (kind == "bool") {
 			if (text != "true" && text != "false") return false;
-			toml = TomlValue{TomlValue::Type::Bool};
+			toml = TomlValue{false};
 			toml.boolean() = text == "true";
 		} else if (kind == "datetime") {
-			toml = TomlValue{TomlValue::Type::DateTime};
+			toml = TomlValue{TomlOffsetDateTime{}};
 			toml.text() = text;
 		} else if (kind == "datetime-local") {
-			toml = TomlValue{TomlValue::Type::DateTimeLocal};
+			toml = TomlValue{TomlLocalDateTime{}};
 			toml.text() = text;
 		} else if (kind == "date-local") {
-			toml = TomlValue{TomlValue::Type::DateLocal};
+			toml = TomlValue{TomlLocalDate{}};
 			toml.text() = text;
 		} else if (kind == "time-local") {
-			toml = TomlValue{TomlValue::Type::TimeLocal};
+			toml = TomlValue{TomlLocalTime{}};
 			toml.text() = text;
 		} else {
 			return false;
@@ -261,7 +261,7 @@ bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 		return true;
 	}
 
-	toml = TomlValue{TomlValue::Type::Table};
+	toml = TomlValue{TomlTable{}};
 	for (const auto &[key, child] : json.object) {
 		TomlValue converted;
 		if (!decode_tagged(child, converted)) return false;
@@ -285,7 +285,7 @@ int main() {
 
 	TomlDocument document;
 	if (!decode_tagged(json, document.root) ||
-	    document.root.type() != TomlValue::Type::Table) {
+	    !document.root.is<TomlTable>()) {
 		std::cerr << "invalid tagged TOML value\n";
 		return 1;
 	}

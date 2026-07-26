@@ -98,23 +98,17 @@ using TomlValueData = std::variant<
 	TomlTable>;
 
 struct TomlValue {
-	enum class Type {
-		String,
-		Integer,
-		Float,
-		Bool,
-		DateTime,
-		DateTimeLocal,
-		DateLocal,
-		TimeLocal,
-		Array,
-		Table
-	};
+	TomlValue() : data(TomlTable{}) {}
 
-	explicit TomlValue(Type value_type = Type::Table);
+	template<typename T>
+		requires (
+			!std::same_as<std::remove_cvref_t<T>, TomlValue> &&
+			std::constructible_from<TomlValueData, T>)
+	explicit TomlValue(T &&value) : data(std::forward<T>(value)) {}
 
-	[[nodiscard]] Type type() const noexcept {
-		return static_cast<Type>(data.index());
+	template<typename T>
+	[[nodiscard]] bool is() const noexcept {
+		return std::holds_alternative<T>(data);
 	}
 
 	std::string &text();
@@ -148,10 +142,6 @@ struct TomlValue {
 	TomlValue &insert(std::string key, TomlValue value);
 };
 
-static_assert(
-	static_cast<size_t>(TomlValue::Type::Table) + 1 ==
-	std::variant_size_v<TomlValueData>);
-
 inline TomlValue *TomlValue::find(std::string_view key) noexcept {
 	auto &values = table();
 	auto value = values.find(key);
@@ -169,7 +159,7 @@ inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
 }
 
 struct TomlDocument {
-	TomlValue root{TomlValue::Type::Table};
+	TomlValue root;
 	std::vector<TomlComment> trailing_comments;
 };
 

@@ -293,25 +293,25 @@ TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]")
 TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {
 	TomlDocument document;
 
-	TomlValue title{TomlValue::Type::String};
+	TomlValue title{std::string{}};
 	title.text() = "demo";
 	title.leading_comments.push_back({" generated document", 0, 1, 1, false});
 	document.root.insert("title", std::move(title));
 
-	TomlValue values{TomlValue::Type::Table};
-	TomlValue enabled{TomlValue::Type::Bool};
+	TomlValue values{TomlTable{}};
+	TomlValue enabled{false};
 	enabled.boolean() = true;
 	values.insert("enabled", std::move(enabled));
-	TomlValue numbers{TomlValue::Type::Array};
+	TomlValue numbers{TomlArray{}};
 	for (const int number : {1, 2}) {
-		TomlValue element{TomlValue::Type::Integer};
+		TomlValue element{int64_t{}};
 		element.integer() = number;
 		numbers.array().push_back(std::move(element));
 	}
 	values.insert("numbers", std::move(numbers));
 
-	TomlValue nested{TomlValue::Type::Table};
-	TomlValue date{TomlValue::Type::DateLocal};
+	TomlValue nested{TomlTable{}};
+	TomlValue date{TomlLocalDate{}};
 	date.text() = "2026-07-25";
 	nested.insert("date", std::move(date));
 	values.insert("nested", std::move(nested));

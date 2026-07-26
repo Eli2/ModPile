@@ -70,11 +70,11 @@ void write_table(std::ostream &output, const TomlValue &value) {
 }
 
 void write_value(std::ostream &output, const TomlValue &value) {
-	if (value.type() == TomlValue::Type::Table) {
+	if (value.is<TomlTable>()) {
 		write_table(output, value);
 		return;
 	}
-	if (value.type() == TomlValue::Type::Array) {
+	if (value.is<TomlArray>()) {
 		output.put('[');
 		bool first = true;
 		for (const auto &element : value.array()) {
@@ -87,40 +87,28 @@ void write_value(std::ostream &output, const TomlValue &value) {
 	}
 
 	output << R"({"type":")";
-	switch (value.type()) {
-		case TomlValue::Type::String:
-			output << R"(string","value":)";
-			write_json_string(output, value.text());
-			break;
-		case TomlValue::Type::Integer:
-			output << R"(integer","value":")" << value.integer() << '"';
-			break;
-		case TomlValue::Type::Float:
-			output << R"(float","value":)";
-			write_json_string(output, float_string(value.floating()));
-			break;
-		case TomlValue::Type::Bool:
-			output << R"(bool","value":")" << (value.boolean() ? "true" : "false") << '"';
-			break;
-		case TomlValue::Type::DateTime:
-			output << R"(datetime","value":)";
-			write_json_string(output, value.text());
-			break;
-		case TomlValue::Type::DateTimeLocal:
-			output << R"(datetime-local","value":)";
-			write_json_string(output, value.text());
-			break;
-		case TomlValue::Type::DateLocal:
-			output << R"(date-local","value":)";
-			write_json_string(output, value.text());
-			break;
-		case TomlValue::Type::TimeLocal:
-			output << R"(time-local","value":)";
-			write_json_string(output, value.text());
-			break;
-		case TomlValue::Type::Array:
-		case TomlValue::Type::Table:
-			break;
+	if (value.is<std::string>()) {
+		output << R"(string","value":)";
+		write_json_string(output, value.text());
+	} else if (value.is<int64_t>()) {
+		output << R"(integer","value":")" << value.integer() << '"';
+	} else if (value.is<double>()) {
+		output << R"(float","value":)";
+		write_json_string(output, float_string(value.floating()));
+	} else if (value.is<bool>()) {
+		output << R"(bool","value":")" << (value.boolean() ? "true" : "false") << '"';
+	} else if (value.is<TomlOffsetDateTime>()) {
+		output << R"(datetime","value":)";
+		write_json_string(output, value.text());
+	} else if (value.is<TomlLocalDateTime>()) {
+		output << R"(datetime-local","value":)";
+		write_json_string(output, value.text());
+	} else if (value.is<TomlLocalDate>()) {
+		output << R"(date-local","value":)";
+		write_json_string(output, value.text());
+	} else if (value.is<TomlLocalTime>()) {
+		output << R"(time-local","value":)";
+		write_json_string(output, value.text());
 	}
 	output.put('}');
 }
