@@ -154,6 +154,9 @@ public:
 		return true;
 	}
 
+	size_t line() const noexcept { return m_line; }
+	size_t column() const noexcept { return m_column; }
+
 private:
 	std::string_view m_input;
 	TomlDocument &m_document;
@@ -916,11 +919,16 @@ private:
 
 bool TomlReader::load(const std::filesystem::path &path) {
 	std::ifstream input(path, std::ios::in | std::ios::binary);
-	if (!input) return false;
+	if (!input) {
+		m_document = {};
+		m_error_message = std::format("Could not open TOML file '{}'.", path.string());
+		return false;
+	}
 	return load(input);
 }
 
 bool TomlReader::load(std::istream &input) {
+	m_error_message.clear();
 	std::string text;
 	char buffer[4096];
 	while (input) {
@@ -930,15 +938,21 @@ bool TomlReader::load(std::istream &input) {
 	}
 	if (input.bad()) {
 		m_document = {};
+		m_error_message = "Could not read TOML input.";
 		return false;
 	}
 	TomlDocument parsed;
 	Parser parser(text, parsed);
 	if (!parser.parse()) {
 		m_document = {};
+		m_error_message = std::format(
+			"TOML parse error at line {}, column {}.",
+			parser.line(),
+			parser.column());
 		return false;
 	}
 	m_document = std::move(parsed);
+	m_error_message.clear();
 	return true;
 }
 

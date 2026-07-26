@@ -214,6 +214,17 @@ TEST_CASE("TOML reader rejects malformed input as a complete document", "[toml][
 	CHECK_FALSE(reader.load(input));
 }
 
+TEST_CASE("TOML reader reports and clears parse errors", "[toml][reader]") {
+	TomlReader reader;
+	std::istringstream invalid("[section]\nvalue = [1,, 2]\n");
+	CHECK_FALSE(reader.load(invalid));
+	CHECK(reader.error_message() == "TOML parse error at line 2, column 12.");
+
+	std::istringstream valid("[section]\nvalue = [1, 2]\n");
+	REQUIRE(reader.load(valid));
+	CHECK(reader.error_message().empty());
+}
+
 TEST_CASE("TOML reader separates sections and missing values", "[toml][reader]") {
 	auto reader = read_toml("[first]\nvalue = 1\n[second]\nvalue = 2\n");
 
@@ -563,6 +574,7 @@ TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {
 	input.setstate(std::ios::badbit);
 	TomlReader reader;
 	CHECK_FALSE(reader.load(input));
+	CHECK(reader.error_message() == "Could not read TOML input.");
 
 	TomlWriter writer;
 	writer.section("section");

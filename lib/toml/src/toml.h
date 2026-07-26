@@ -171,6 +171,7 @@ public:
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
 
 	const TomlDocument &document() const noexcept { return m_document; }
+	std::string_view error_message() const noexcept { return m_error_message; }
 
 	bool get(std::string &value, std::string_view section, std::string_view key) const;
 	bool get(std::filesystem::path &value, std::string_view section, std::string_view key) const;
@@ -206,6 +207,7 @@ public:
 
 private:
 	TomlDocument m_document;
+	std::string m_error_message;
 
 	const TomlValue *find(std::string_view section, std::string_view key) const;
 };

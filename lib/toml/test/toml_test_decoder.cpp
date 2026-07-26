@@ -118,7 +118,7 @@ void write_value(std::ostream &output, const TomlValue &value) {
 int main() {
 	TomlReader reader;
 	if (!reader.load(std::cin)) {
-		std::cerr << "failed to read TOML input\n";
+		std::cerr << reader.error_message() << '\n';
 		return 1;
 	}
 
