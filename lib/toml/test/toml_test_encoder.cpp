@@ -203,7 +203,7 @@ bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 		for (const auto &element : json.array) {
 			TomlValue converted;
 			if (!decode_tagged(element, converted)) return false;
-			toml.array.push_back(std::move(converted));
+			toml.array().push_back(std::move(converted));
 		}
 		return true;
 	}
@@ -220,41 +220,41 @@ bool decode_tagged(const JsonValue &json, TomlValue &toml) {
 		const auto &text = value->string;
 		if (kind == "string") {
 			toml = TomlValue{TomlValue::Type::String};
-			toml.str = text;
+			toml.text() = text;
 		} else if (kind == "integer") {
 			toml = TomlValue{TomlValue::Type::Integer};
 			const auto result = std::from_chars(
-				text.data(), text.data() + text.size(), toml.i);
+				text.data(), text.data() + text.size(), toml.integer());
 			if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) return false;
 		} else if (kind == "float") {
 			toml = TomlValue{TomlValue::Type::Float};
 			if (text == "inf" || text == "+inf") {
-				toml.f = std::numeric_limits<double>::infinity();
+				toml.floating() = std::numeric_limits<double>::infinity();
 			} else if (text == "-inf") {
-				toml.f = -std::numeric_limits<double>::infinity();
+				toml.floating() = -std::numeric_limits<double>::infinity();
 			} else if (text == "nan" || text == "+nan" || text == "-nan") {
-				toml.f = std::numeric_limits<double>::quiet_NaN();
+				toml.floating() = std::numeric_limits<double>::quiet_NaN();
 			} else {
 				const auto result = std::from_chars(
-					text.data(), text.data() + text.size(), toml.f);
+					text.data(), text.data() + text.size(), toml.floating());
 				if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) return false;
 			}
 		} else if (kind == "bool") {
 			if (text != "true" && text != "false") return false;
 			toml = TomlValue{TomlValue::Type::Bool};
-			toml.b = text == "true";
+			toml.boolean() = text == "true";
 		} else if (kind == "datetime") {
 			toml = TomlValue{TomlValue::Type::DateTime};
-			toml.str = text;
+			toml.text() = text;
 		} else if (kind == "datetime-local") {
 			toml = TomlValue{TomlValue::Type::DateTimeLocal};
-			toml.str = text;
+			toml.text() = text;
 		} else if (kind == "date-local") {
 			toml = TomlValue{TomlValue::Type::DateLocal};
-			toml.str = text;
+			toml.text() = text;
 		} else if (kind == "time-local") {
 			toml = TomlValue{TomlValue::Type::TimeLocal};
-			toml.str = text;
+			toml.text() = text;
 		} else {
 			return false;
 		}
@@ -285,7 +285,7 @@ int main() {
 
 	TomlDocument document;
 	if (!decode_tagged(json, document.root) ||
-	    document.root.type != TomlValue::Type::Table) {
+	    document.root.type() != TomlValue::Type::Table) {
 		std::cerr << "invalid tagged TOML value\n";
 		return 1;
 	}

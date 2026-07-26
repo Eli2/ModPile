@@ -71,7 +71,7 @@ size_t parse_once(std::string_view source) {
 	std::istringstream input{std::string(source)};
 	TomlReader reader;
 	if (!reader.load(input)) return 0;
-	return reader.document().root.table.size();
+	return reader.document().root.table().size();
 }
 
 size_t serialize_once(const TomlDocument &document) {
@@ -102,7 +102,7 @@ size_t update_once(
 		writer.write(keys[i], static_cast<int64_t>(i + 1));
 	}
 	const auto *values = writer.document().root.find("values");
-	return values ? values->table.size() : 0;
+	return values ? values->table().size() : 0;
 }
 
 } // namespace
@@ -147,7 +147,7 @@ TEST_CASE("TOML ordered document lookup scaling", "[!benchmark][toml][lookup]") 
 	const auto document = parse_document(make_wide_document(10'000));
 	const auto *values = document.root.find("values");
 	REQUIRE(values);
-	REQUIRE(values->table.size() == 10'000);
+	REQUIRE(values->table().size() == 10'000);
 
 	BENCHMARK("find first of 10,000 values") {
 		return values->find("value_0");

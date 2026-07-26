@@ -59,7 +59,7 @@ void write_value(std::ostream &output, const TomlValue &value);
 void write_table(std::ostream &output, const TomlValue &value) {
 	output.put('{');
 	bool first = true;
-	for (const auto &[key, child] : value.table) {
+	for (const auto &[key, child] : value.table()) {
 		if (!first) output.put(',');
 		first = false;
 		write_json_string(output, key);
@@ -70,14 +70,14 @@ void write_table(std::ostream &output, const TomlValue &value) {
 }
 
 void write_value(std::ostream &output, const TomlValue &value) {
-	if (value.type == TomlValue::Type::Table) {
+	if (value.type() == TomlValue::Type::Table) {
 		write_table(output, value);
 		return;
 	}
-	if (value.type == TomlValue::Type::Array) {
+	if (value.type() == TomlValue::Type::Array) {
 		output.put('[');
 		bool first = true;
-		for (const auto &element : value.array) {
+		for (const auto &element : value.array()) {
 			if (!first) output.put(',');
 			first = false;
 			write_value(output, element);
@@ -87,36 +87,36 @@ void write_value(std::ostream &output, const TomlValue &value) {
 	}
 
 	output << R"({"type":")";
-	switch (value.type) {
+	switch (value.type()) {
 		case TomlValue::Type::String:
 			output << R"(string","value":)";
-			write_json_string(output, value.str);
+			write_json_string(output, value.text());
 			break;
 		case TomlValue::Type::Integer:
-			output << R"(integer","value":")" << value.i << '"';
+			output << R"(integer","value":")" << value.integer() << '"';
 			break;
 		case TomlValue::Type::Float:
 			output << R"(float","value":)";
-			write_json_string(output, float_string(value.f));
+			write_json_string(output, float_string(value.floating()));
 			break;
 		case TomlValue::Type::Bool:
-			output << R"(bool","value":")" << (value.b ? "true" : "false") << '"';
+			output << R"(bool","value":")" << (value.boolean() ? "true" : "false") << '"';
 			break;
 		case TomlValue::Type::DateTime:
 			output << R"(datetime","value":)";
-			write_json_string(output, value.str);
+			write_json_string(output, value.text());
 			break;
 		case TomlValue::Type::DateTimeLocal:
 			output << R"(datetime-local","value":)";
-			write_json_string(output, value.str);
+			write_json_string(output, value.text());
 			break;
 		case TomlValue::Type::DateLocal:
 			output << R"(date-local","value":)";
-			write_json_string(output, value.str);
+			write_json_string(output, value.text());
 			break;
 		case TomlValue::Type::TimeLocal:
 			output << R"(time-local","value":)";
-			write_json_string(output, value.str);
+			write_json_string(output, value.text());
 			break;
 		case TomlValue::Type::Array:
 		case TomlValue::Type::Table:

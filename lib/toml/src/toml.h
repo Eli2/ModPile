@@ -15,6 +15,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <tsl/ordered_map.h>
@@ -39,6 +40,22 @@ enum class TomlValueFormat {
 };
 
 struct TomlValue;
+
+struct TomlOffsetDateTime {
+	std::string value;
+};
+
+struct TomlLocalDateTime {
+	std::string value;
+};
+
+struct TomlLocalDate {
+	std::string value;
+};
+
+struct TomlLocalTime {
+	std::string value;
+};
 
 struct TomlStringHash {
 	using is_transparent = void;
@@ -67,6 +84,19 @@ using TomlTable = tsl::ordered_map<
 	std::allocator<std::pair<std::string, TomlValue>>,
 	TomlTableStorage>;
 
+using TomlArray = std::vector<TomlValue>;
+using TomlValueData = std::variant<
+	std::string,
+	int64_t,
+	double,
+	bool,
+	TomlOffsetDateTime,
+	TomlLocalDateTime,
+	TomlLocalDate,
+	TomlLocalTime,
+	TomlArray,
+	TomlTable>;
+
 struct TomlValue {
 	enum class Type {
 		String,
@@ -81,15 +111,26 @@ struct TomlValue {
 		Table
 	};
 
-	explicit TomlValue(Type value_type = Type::Table) : type(value_type) {}
+	explicit TomlValue(Type value_type = Type::Table);
 
-	Type        type;
-	std::string str;   // String and date/time values
-	int64_t     i = 0; // Integer
-	double      f = 0; // Float
-	bool        b = false; // Bool
-	std::vector<TomlValue> array;
-	TomlTable table;
+	[[nodiscard]] Type type() const noexcept {
+		return static_cast<Type>(data.index());
+	}
+
+	std::string &text();
+	const std::string &text() const;
+	int64_t &integer() { return std::get<int64_t>(data); }
+	const int64_t &integer() const { return std::get<int64_t>(data); }
+	double &floating() { return std::get<double>(data); }
+	const double &floating() const { return std::get<double>(data); }
+	bool &boolean() { return std::get<bool>(data); }
+	const bool &boolean() const { return std::get<bool>(data); }
+	TomlArray &array() { return std::get<TomlArray>(data); }
+	const TomlArray &array() const { return std::get<TomlArray>(data); }
+	TomlTable &table() { return std::get<TomlTable>(data); }
+	const TomlTable &table() const { return std::get<TomlTable>(data); }
+
+	TomlValueData data;
 	TomlValueFormat format = TomlValueFormat::Plain;
 	size_t format_width = 0; // Minimum digits for non-decimal integers.
 	std::vector<TomlComment> leading_comments;
@@ -107,18 +148,24 @@ struct TomlValue {
 	TomlValue &insert(std::string key, TomlValue value);
 };
 
+static_assert(
+	static_cast<size_t>(TomlValue::Type::Table) + 1 ==
+	std::variant_size_v<TomlValueData>);
+
 inline TomlValue *TomlValue::find(std::string_view key) noexcept {
-	auto value = table.find(key);
-	return value == table.end() ? nullptr : &value.value();
+	auto &values = table();
+	auto value = values.find(key);
+	return value == values.end() ? nullptr : &value.value();
 }
 
 inline const TomlValue *TomlValue::find(std::string_view key) const noexcept {
-	const auto value = table.find(key);
-	return value == table.end() ? nullptr : &value.value();
+	const auto &values = table();
+	const auto value = values.find(key);
+	return value == values.end() ? nullptr : &value.value();
 }
 
 inline TomlValue &TomlValue::insert(std::string key, TomlValue value) {
-	return table.try_emplace(std::move(key), std::move(value)).first.value();
+	return table().try_emplace(std::move(key), std::move(value)).first.value();
 }
 
 struct TomlDocument {

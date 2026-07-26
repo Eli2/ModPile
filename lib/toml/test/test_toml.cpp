@@ -140,16 +140,16 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 		"value = \"last\"\n");
 
 	const auto &document = reader.document();
-	REQUIRE(document.root.table.size() == 3);
-	const auto root_entry = document.root.table.begin();
+	REQUIRE(document.root.table().size() == 3);
+	const auto root_entry = document.root.table().begin();
 	const auto z_entry = std::next(root_entry);
 	const auto a_entry = std::next(z_entry);
 	CHECK(root_entry->first == "root");
 	CHECK(z_entry->first == "z");
 	CHECK(a_entry->first == "a");
-	REQUIRE(z_entry->second.table.size() == 2);
-	CHECK(z_entry->second.table.begin()->first == "first");
-	CHECK(std::next(z_entry->second.table.begin())->first == "second");
+	REQUIRE(z_entry->second.table().size() == 2);
+	CHECK(z_entry->second.table().begin()->first == "first");
+	CHECK(std::next(z_entry->second.table().begin())->first == "second");
 
 	const auto &root = root_entry->second;
 	REQUIRE(root.leading_comments.size() == 1);
@@ -294,33 +294,33 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 	TomlDocument document;
 
 	TomlValue title{TomlValue::Type::String};
-	title.str = "demo";
+	title.text() = "demo";
 	title.leading_comments.push_back({" generated document", 0, 1, 1, false});
 	document.root.insert("title", std::move(title));
 
 	TomlValue values{TomlValue::Type::Table};
 	TomlValue enabled{TomlValue::Type::Bool};
-	enabled.b = true;
+	enabled.boolean() = true;
 	values.insert("enabled", std::move(enabled));
 	TomlValue numbers{TomlValue::Type::Array};
 	for (const int number : {1, 2}) {
 		TomlValue element{TomlValue::Type::Integer};
-		element.i = number;
-		numbers.array.push_back(std::move(element));
+		element.integer() = number;
+		numbers.array().push_back(std::move(element));
 	}
 	values.insert("numbers", std::move(numbers));
 
 	TomlValue nested{TomlValue::Type::Table};
 	TomlValue date{TomlValue::Type::DateLocal};
-	date.str = "2026-07-25";
+	date.text() = "2026-07-25";
 	nested.insert("date", std::move(date));
 	values.insert("nested", std::move(nested));
 	document.root.insert("values", std::move(values));
 
 	TomlWriter writer;
 	writer.load(document);
-	REQUIRE(writer.document().root.table.begin()->first == "title");
-	REQUIRE(std::next(writer.document().root.table.begin())->first == "values");
+	REQUIRE(writer.document().root.table().begin()->first == "title");
+	REQUIRE(std::next(writer.document().root.table().begin())->first == "values");
 
 	std::ostringstream output;
 	REQUIRE(writer.save(output));
