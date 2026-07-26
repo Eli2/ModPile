@@ -159,20 +159,29 @@ struct TomlDocument {
 	std::vector<TomlComment> trailing_comments;
 };
 
+namespace toml {
+
+// A parsed document and an error message. On success, the document has a value
+// and the error is empty; on failure, the document is empty and error is set.
+using ParseResult = std::pair<std::optional<TomlDocument>, std::string>;
+
+ParseResult from_string(std::string_view input);
+ParseResult from_stream(std::istream &input);
+ParseResult from_file(const std::filesystem::path &path);
+
+} // namespace toml
+
 class TomlReader {
 public:
-	// Parse a complete TOML 1.0 document. Returns false on I/O or syntax error.
-	bool load(std::istream &input);
-	bool load(const std::filesystem::path &path);
+	explicit TomlReader(const TomlDocument &document) noexcept
+		: m_document(document) {}
 
 	std::optional<std::string> get_string (std::string_view section, std::string_view key) const;
 	std::optional<int64_t>     get_integer(std::string_view section, std::string_view key) const;
 	std::optional<double>      get_float  (std::string_view section, std::string_view key) const;
 	std::optional<bool>        get_bool   (std::string_view section, std::string_view key) const;
 
-	TomlDocument &document() noexcept { return m_document; }
 	const TomlDocument &document() const noexcept { return m_document; }
-	std::string_view error_message() const noexcept { return m_error_message; }
 
 	bool get(std::string &value, std::string_view section, std::string_view key) const;
 	bool get(std::filesystem::path &value, std::string_view section, std::string_view key) const;
@@ -207,8 +216,7 @@ public:
 	}
 
 private:
-	TomlDocument m_document;
-	std::string m_error_message;
+	const TomlDocument &m_document;
 
 	const TomlValue *find(std::string_view section, std::string_view key) const;
 };

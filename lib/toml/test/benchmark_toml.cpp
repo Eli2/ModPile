@@ -61,17 +61,13 @@ std::string make_sectioned_document(size_t sections, size_t values_per_section) 
 }
 
 TomlDocument parse_document(std::string_view source) {
-	std::istringstream input{std::string(source)};
-	TomlReader reader;
-	if (!reader.load(input)) return {};
-	return reader.document();
+	auto [document, error] = toml::from_string(source);
+	return document ? std::move(*document) : TomlDocument{};
 }
 
 size_t parse_once(std::string_view source) {
-	std::istringstream input{std::string(source)};
-	TomlReader reader;
-	if (!reader.load(input)) return 0;
-	return reader.document().root.table().size();
+	auto [document, error] = toml::from_string(source);
+	return document ? document->root.table().size() : 0;
 }
 
 size_t serialize_once(const TomlDocument &document) {

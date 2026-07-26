@@ -116,13 +116,13 @@ void write_value(std::ostream &output, const TomlValue &value) {
 } // namespace
 
 int main() {
-	TomlReader reader;
-	if (!reader.load(std::cin)) {
-		std::cerr << reader.error_message() << '\n';
+	auto [document, error] = toml::from_stream(std::cin);
+	if (!document) {
+		std::cerr << error << '\n';
 		return 1;
 	}
 
-	write_table(std::cout, reader.document().root);
+	write_table(std::cout, document->root);
 	std::cout.put('\n');
 	return std::cout ? 0 : 1;
 }

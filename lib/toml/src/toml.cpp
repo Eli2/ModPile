@@ -30,7 +30,7 @@ const std::string &TomlValue::text() const {
 	throw std::bad_variant_access{};
 }
 
-// ─── TomlReader ──────────────────────────────────────────────────────────────
+// ─── TOML parsing ────────────────────────────────────────────────────────────
 
 namespace {
 
@@ -917,18 +917,18 @@ private:
 
 } // namespace
 
-bool TomlReader::load(const std::filesystem::path &path) {
+toml::ParseResult toml::from_file(const std::filesystem::path &path) {
 	std::ifstream input(path, std::ios::in | std::ios::binary);
 	if (!input) {
-		m_document = {};
-		m_error_message = std::format("Could not open TOML file '{}'.", path.string());
-		return false;
+		return {
+			std::nullopt,
+			std::format("Could not open TOML file '{}'.", path.string())
+		};
 	}
-	return load(input);
+	return from_stream(input);
 }
 
-bool TomlReader::load(std::istream &input) {
-	m_error_message.clear();
+toml::ParseResult toml::from_stream(std::istream &input) {
 	std::string text;
 	char buffer[4096];
 	while (input) {
@@ -937,24 +937,27 @@ bool TomlReader::load(std::istream &input) {
 		if (count > 0) text.append(buffer, static_cast<size_t>(count));
 	}
 	if (input.bad()) {
-		m_document = {};
-		m_error_message = "Could not read TOML input.";
-		return false;
+		return {std::nullopt, "Could not read TOML input."};
 	}
-	TomlDocument parsed;
-	Parser parser(text, parsed);
-	if (!parser.parse()) {
-		m_document = {};
-		m_error_message = std::format(
-			"TOML parse error at line {}, column {}.",
-			parser.line(),
-			parser.column());
-		return false;
-	}
-	m_document = std::move(parsed);
-	m_error_message.clear();
-	return true;
+	return from_string(text);
 }
+
+toml::ParseResult toml::from_string(std::string_view input) {
+	TomlDocument parsed;
+	Parser parser(input, parsed);
+	if (!parser.parse()) {
+		return {
+			std::nullopt,
+			std::format(
+				"TOML parse error at line {}, column {}.",
+				parser.line(),
+				parser.column())
+		};
+	}
+	return {std::move(parsed), {}};
+}
+
+// ─── TomlReader ──────────────────────────────────────────────────────────────
 
 const TomlValue *TomlReader::find(std::string_view section, std::string_view key) const {
 	const TomlValue *table = &m_document.root;

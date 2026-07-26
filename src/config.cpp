@@ -42,11 +42,12 @@ void config_load(AppState &app) {
 
 	if(!fs::exists(g_configFile)) return;
 
-	TomlReader r;
-	if(!r.load(g_configFile)) {
-		log_error("Failed to read config file: {}", g_configFile.string());
+	auto [document, error] = toml::from_file(g_configFile);
+	if(!document) {
+		log_error("Failed to read config file: {}", error);
 		return;
 	}
+	TomlReader r(*document);
 
 	r.get(app.config.database.path, "database", "path");
 
@@ -95,11 +96,11 @@ void config_save(AppState &app) {
 
 	TomlDocument document;
 	if(fs::exists(g_configFile)) {
-		TomlReader existing;
-		if(existing.load(g_configFile)) {
-			document = std::move(existing.document());
+		auto [existing, error] = toml::from_file(g_configFile);
+		if(existing) {
+			document = std::move(*existing);
 		} else {
-			log_error("Failed to preserve existing config comments: {}", g_configFile.string());
+			log_error("Failed to preserve existing config comments: {}", error);
 		}
 	}
 	TomlWriter w(document);

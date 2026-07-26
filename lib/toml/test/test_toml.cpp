@@ -13,17 +13,17 @@
 
 namespace {
 
-TomlReader read_toml(const std::string &text) {
-	std::istringstream input(text);
-	TomlReader reader;
-	REQUIRE(reader.load(input));
-	return reader;
+TomlDocument read_toml(std::string_view text) {
+	auto [document, error] = toml::from_string(text);
+	INFO(error);
+	REQUIRE(document);
+	return std::move(*document);
 }
 
 } // namespace
 
 TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
-	auto reader = read_toml(R"(
+	auto document = read_toml(R"(
 		[values]
 		text = "hello"
 		integer = -42
@@ -36,6 +36,7 @@ TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
 		enabled = true
 		disabled = false
 	)");
+	TomlReader reader(document);
 
 	CHECK(reader.get_string("values", "text") == "hello");
 	CHECK(reader.get_integer("values", "integer") == -42);
@@ -67,20 +68,22 @@ TEST_CASE("TOML reader reads every supported scalar type", "[toml][reader]") {
 }
 
 TEST_CASE("TOML reader accepts integers where callers request floats", "[toml][reader]") {
-	auto reader = read_toml("[player]\ngain = 2\n");
+	auto document = read_toml("[player]\ngain = 2\n");
+	TomlReader reader(document);
 
 	CHECK(reader.get_float("player", "gain") == 2.0);
 	CHECK(reader.get_integer("player", "gain") == 2);
 }
 
 TEST_CASE("TOML reader assigns values to application types", "[toml][reader]") {
-	auto reader = read_toml(R"(
+	auto document = read_toml(R"(
 		[values]
 		path = "/tmp/music"
 		integer = -42
 		fraction = 1.25
 		enabled = true
 	)");
+	TomlReader reader(document);
 
 	std::filesystem::path path;
 	int integer = 0;
@@ -101,13 +104,14 @@ TEST_CASE("TOML reader assigns values to application types", "[toml][reader]") {
 }
 
 TEST_CASE("TOML reader keeps scalar types distinct", "[toml][reader]") {
-	auto reader = read_toml(R"(
+	auto document = read_toml(R"(
 		[values]
 		text = "1"
 		integer = 1
 		float = 1.5
 		boolean = true
 	)");
+	TomlReader reader(document);
 
 	CHECK_FALSE(reader.get_integer("values", "text"));
 	CHECK_FALSE(reader.get_bool("values", "integer"));
@@ -116,12 +120,13 @@ TEST_CASE("TOML reader keeps scalar types distinct", "[toml][reader]") {
 }
 
 TEST_CASE("TOML reader handles whitespace CRLF and comments", "[toml][reader]") {
-	auto reader = read_toml(
+	auto document = read_toml(
 		"# full-line comment\r\n"
 		"  [ spaced ]  # section comment\r\n"
 		"  key \t=\t \"value # not a comment\"  # value comment\r\n"
 		"number = 7 # numeric comment\r\n"
 		"flag = true # boolean comment\r\n");
+	TomlReader reader(document);
 
 	CHECK(reader.get_string("spaced", "key") == "value # not a comment");
 	CHECK(reader.get_integer("spaced", "number") == 7);
@@ -129,7 +134,7 @@ TEST_CASE("TOML reader handles whitespace CRLF and comments", "[toml][reader]") 
 }
 
 TEST_CASE("TOML reader preserves value section and comment order", "[toml][reader]") {
-	auto reader = read_toml(
+	auto parsed_document = read_toml(
 		"# document comment\n"
 		"root = 1 # trailing root comment\n"
 		"[z]\n"
@@ -138,6 +143,7 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 		"# section comment\n"
 		"[a]\n"
 		"value = \"last\"\n");
+	TomlReader reader(parsed_document);
 
 	const auto &document = reader.document();
 	REQUIRE(document.root.table().size() == 3);
@@ -162,22 +168,24 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 }
 
 TEST_CASE("TOML reader decodes supported basic-string escapes", "[toml][reader]") {
-	auto reader = read_toml(
+	auto document = read_toml(
 		R"([strings]
 value = "quote: \" slash: \\ newline:\n tab:\t carriage:\r backspace:\b formfeed:\f"
 )");
+	TomlReader reader(document);
 
 	CHECK(reader.get_string("strings", "value") ==
 	      "quote: \" slash: \\ newline:\n tab:\t carriage:\r backspace:\b formfeed:\f");
 }
 
 TEST_CASE("TOML reader preserves UTF-8 strings", "[toml][reader]") {
-	auto reader = read_toml("[strings]\nvalue = \"Grüße 日本語 🎛️\"\n");
+	auto document = read_toml("[strings]\nvalue = \"Grüße 日本語 🎛️\"\n");
+	TomlReader reader(document);
 	CHECK(reader.get_string("strings", "value") == "Grüße 日本語 🎛️");
 }
 
 TEST_CASE("TOML reader handles signed values exponents and negative zero", "[toml][reader]") {
-	auto reader = read_toml(R"(
+	auto document = read_toml(R"(
 		[numbers]
 		positive = +17
 		negative = -17
@@ -186,6 +194,7 @@ TEST_CASE("TOML reader handles signed values exponents and negative zero", "[tom
 		upper_exponent = -2E-2
 		negative_zero = -0.0
 	)");
+	TomlReader reader(document);
 
 	CHECK(reader.get_integer("numbers", "positive") == 17);
 	CHECK(reader.get_integer("numbers", "negative") == -17);
@@ -198,7 +207,7 @@ TEST_CASE("TOML reader handles signed values exponents and negative zero", "[tom
 }
 
 TEST_CASE("TOML reader rejects malformed input as a complete document", "[toml][reader]") {
-	std::istringstream input(R"(
+	auto [document, error] = toml::from_string(R"(
 		root = 1
 		broken section
 		[valid]
@@ -210,23 +219,43 @@ TEST_CASE("TOML reader rejects malformed input as a complete document", "[toml][
 		bad_boolean = TRUE
 		good = 9
 	)");
-	TomlReader reader;
-	CHECK_FALSE(reader.load(input));
+	CHECK_FALSE(document);
+	CHECK_FALSE(error.empty());
 }
 
-TEST_CASE("TOML reader reports and clears parse errors", "[toml][reader]") {
-	TomlReader reader;
-	std::istringstream invalid("[section]\nvalue = [1,, 2]\n");
-	CHECK_FALSE(reader.load(invalid));
-	CHECK(reader.error_message() == "TOML parse error at line 2, column 12.");
+TEST_CASE("TOML parser reports parse errors", "[toml][reader]") {
+	const auto [invalid_document, invalid_error] =
+		toml::from_string("[section]\nvalue = [1,, 2]\n");
+	CHECK_FALSE(invalid_document);
+	CHECK(invalid_error == "TOML parse error at line 2, column 12.");
 
-	std::istringstream valid("[section]\nvalue = [1, 2]\n");
-	REQUIRE(reader.load(valid));
-	CHECK(reader.error_message().empty());
+	const auto [valid_document, valid_error] =
+		toml::from_string("[section]\nvalue = [1, 2]\n");
+	REQUIRE(valid_document);
+	CHECK(valid_error.empty());
+}
+
+TEST_CASE("TOML parser reads files", "[toml][reader]") {
+	const auto path =
+		std::filesystem::temp_directory_path() / "modpile_test_toml_reader.toml";
+	{
+		std::ofstream output(path, std::ios::binary);
+		REQUIRE(output);
+		output << "[section]\nvalue = 42\n";
+	}
+
+	auto [document, error] = toml::from_file(path);
+	std::filesystem::remove(path);
+
+	INFO(error);
+	REQUIRE(document);
+	TomlReader reader(*document);
+	CHECK(reader.get_integer("section", "value") == 42);
 }
 
 TEST_CASE("TOML reader separates sections and missing values", "[toml][reader]") {
-	auto reader = read_toml("[first]\nvalue = 1\n[second]\nvalue = 2\n");
+	auto document = read_toml("[first]\nvalue = 1\n[second]\nvalue = 2\n");
+	TomlReader reader(document);
 
 	CHECK(reader.get_integer("first", "value") == 1);
 	CHECK(reader.get_integer("second", "value") == 2);
@@ -234,15 +263,12 @@ TEST_CASE("TOML reader separates sections and missing values", "[toml][reader]")
 	CHECK_FALSE(reader.get_integer("first", "missing"));
 }
 
-TEST_CASE("TOML reader replaces its state on a subsequent load", "[toml][reader]") {
-	TomlReader reader;
-	std::istringstream first("[section]\nold = 1\n");
-	REQUIRE(reader.load(first));
-	std::istringstream second("[section]\nnew = 2\n");
-	REQUIRE(reader.load(second));
+TEST_CASE("TOML reader views its supplied document", "[toml][reader]") {
+	auto document = read_toml("[section]\nvalue = 2\n");
+	TomlReader reader(document);
 
-	CHECK_FALSE(reader.get_integer("section", "old"));
-	CHECK(reader.get_integer("section", "new") == 2);
+	CHECK(&reader.document() == &document);
+	CHECK(reader.get_integer("section", "value") == 2);
 }
 
 TEST_CASE("TOML writer serializes an empty document in call order", "[toml][writer]") {
@@ -285,7 +311,7 @@ TEST_CASE("TOML writer can update a referenced document", "[toml][writer]") {
 }
 
 TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]") {
-	auto reader = read_toml(
+	auto document = read_toml(
 		"[numbers]\n"
 		"decimal = 42\n"
 		"hex_lower = 0x002a\n"
@@ -295,7 +321,7 @@ TEST_CASE("TOML writer serializes structured numeric formats", "[toml][writer]")
 		"float_plain = 12.5\n"
 		"float_lower = 5e+2\n"
 		"float_upper = -2E-2\n");
-	TomlWriter writer(reader.document());
+	TomlWriter writer(document);
 
 	std::ostringstream output;
 	REQUIRE(toml::to_stream(writer.document(), output));
@@ -355,9 +381,8 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 	      "[values.nested]\n"
 	      "date = 2026-07-25\n");
 
-	std::istringstream input(output.str());
-	TomlReader reader;
-	REQUIRE(reader.load(input));
+	auto parsed_document = read_toml(output.str());
+	TomlReader reader(parsed_document);
 	CHECK(reader.get_string("", "title") == "demo");
 	CHECK(reader.get_bool("values", "enabled") == true);
 }
@@ -371,9 +396,8 @@ TEST_CASE("TOML writer escapes basic strings and round-trips them", "[toml][writ
 	std::ostringstream output;
 	REQUIRE(toml::to_stream(writer.document(), output));
 	CHECK(output.str() == "[strings]\nvalue = \"quote \\\" slash \\\\ newline\\n tab\\t carriage\\r\"\n");
-	std::istringstream input(output.str());
-	TomlReader reader;
-	REQUIRE(reader.load(input));
+	auto document = read_toml(output.str());
+	TomlReader reader(document);
 	CHECK(reader.get_string("strings", "value") == expected);
 }
 
@@ -386,8 +410,8 @@ TEST_CASE("TOML writer preserves parsed comments and unknown values", "[toml][wr
 		"\n"
 		"[library]\n"
 		"paths = [\"~/Music\", \"/mnt/modules\"]\n";
-	auto reader = read_toml(original);
-	TomlWriter writer(reader.document());
+	auto document = read_toml(original);
+	TomlWriter writer(document);
 
 	writer.section("player");
 	writer.write("gain", 0.75);
@@ -405,8 +429,8 @@ TEST_CASE("TOML writer preserves parsed comments and unknown values", "[toml][wr
 }
 
 TEST_CASE("TOML writer canonicalizes newlines and appends missing keys", "[toml][writer]") {
-	auto reader = read_toml("[player]\r\ngain = 1\r\n\r\n[other]\r\nvalue = true\r\n");
-	TomlWriter writer(reader.document());
+	auto document = read_toml("[player]\r\ngain = 1\r\n\r\n[other]\r\nvalue = true\r\n");
+	TomlWriter writer(document);
 
 	writer.section("player");
 	writer.write("stereo_width", 0.5);
@@ -423,8 +447,8 @@ TEST_CASE("TOML writer canonicalizes newlines and appends missing keys", "[toml]
 }
 
 TEST_CASE("TOML writer updates its loaded document deterministically", "[toml][writer]") {
-	auto reader = read_toml("[player]\ngain = 1.0\n");
-	TomlWriter writer(reader.document());
+	auto document = read_toml("[player]\ngain = 1.0\n");
+	TomlWriter writer(document);
 
 	writer.section("player");
 	writer.write("gain", 0.75);
@@ -462,13 +486,13 @@ TEST_CASE("TOML writer replaces a file from its supplied document", "[toml][writ
 }
 
 TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]") {
-	auto reader = read_toml(
+	auto document = read_toml(
 		"[a]\n"
 		"value = 1\n"
 		"\n"
 		"[c]\n"
 		"value = 3\n");
-	TomlWriter writer(reader.document());
+	TomlWriter writer(document);
 
 	writer.section("a");
 	writer.write("value", 10);
@@ -492,8 +516,8 @@ TEST_CASE("TOML writer inserts missing sections in model order", "[toml][writer]
 
 TEST_CASE("TOML writer inserts missing values without reordering existing values", "[toml][writer]") {
 	SECTION("a missing value is inserted before the next modeled value") {
-		auto reader = read_toml("[values]\nvalA = 1\nvalC = 3\n");
-		TomlWriter writer(reader.document());
+		auto document = read_toml("[values]\nvalA = 1\nvalC = 3\n");
+		TomlWriter writer(document);
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -510,8 +534,8 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 	}
 
 	SECTION("manual ordering is preserved and a trailing value stays trailing") {
-		auto reader = read_toml("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
-		TomlWriter writer(reader.document());
+		auto document = read_toml("[values]\nvalB = 2\nvalC = 3\nvalA = 1\n");
+		TomlWriter writer(document);
 
 		writer.section("values");
 		writer.write("valA", 10);
@@ -531,7 +555,7 @@ TEST_CASE("TOML writer inserts missing values without reordering existing values
 }
 
 TEST_CASE("TOML writer keeps structured comments attached while updating", "[toml][writer]") {
-	auto reader = read_toml(
+	auto document = read_toml(
 		"# section a\n"
 		"[a] # inline section a\n"
 		"# value a\n"
@@ -543,7 +567,7 @@ TEST_CASE("TOML writer keeps structured comments attached while updating", "[tom
 		"# section c line 2\n"
 		"[c] # inline section c\n"
 		"value = 3 # inline value in c\n");
-	TomlWriter writer(reader.document());
+	TomlWriter writer(document);
 
 	writer.section("a");
 	writer.write("valA", 10);
@@ -577,9 +601,9 @@ TEST_CASE("TOML writer keeps structured comments attached while updating", "[tom
 TEST_CASE("TOML stream operations report I/O errors", "[toml][stream]") {
 	std::istringstream input("[section]\nvalue = 1\n");
 	input.setstate(std::ios::badbit);
-	TomlReader reader;
-	CHECK_FALSE(reader.load(input));
-	CHECK(reader.error_message() == "Could not read TOML input.");
+	const auto [document, error] = toml::from_stream(input);
+	CHECK_FALSE(document);
+	CHECK(error == "Could not read TOML input.");
 
 	TomlWriter writer;
 	writer.section("section");
