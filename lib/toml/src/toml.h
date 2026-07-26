@@ -22,10 +22,6 @@
 
 struct TomlComment {
 	std::string text; // Text after '#', excluding the line ending.
-	size_t offset = 0;
-	size_t line = 1;
-	size_t column = 1;
-	bool trailing = false;
 };
 
 enum class TomlValueFormat {

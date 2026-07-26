@@ -159,9 +159,6 @@ TEST_CASE("TOML reader preserves value section and comment order", "[toml][reade
 	const auto &section_a = a_entry->second;
 	REQUIRE(section_a.leading_comments.size() == 1);
 	CHECK(section_a.leading_comments[0].text == " section comment");
-	CHECK(root.leading_comments[0].line == 1);
-	CHECK(root.trailing_comment->line == 2);
-	CHECK(section_a.leading_comments[0].line == 6);
 }
 
 TEST_CASE("TOML reader decodes supported basic-string escapes", "[toml][reader]") {
@@ -295,7 +292,7 @@ TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml]
 
 	TomlValue title{std::string{}};
 	title.text() = "demo";
-	title.leading_comments.push_back({" generated document", 0, 1, 1, false});
+	title.leading_comments.push_back({" generated document"});
 	document.root.insert("title", std::move(title));
 
 	TomlValue values{TomlTable{}};

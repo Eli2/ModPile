@@ -120,7 +120,7 @@ public:
 			if (eof()) break;
 			if (peek() == '#') {
 				TomlComment comment;
-				if (!read_comment(comment, false)) return false;
+				if (!read_comment(comment)) return false;
 				m_pending_comments.push_back(std::move(comment));
 			} else if (newline_here()) {
 				if (!consume_newline()) return false;
@@ -140,7 +140,7 @@ public:
 				skip_spaces();
 				if (!eof() && peek() == '#') {
 					TomlComment comment;
-					if (!read_comment(comment, true)) return false;
+					if (!read_comment(comment)) return false;
 					m_statement_value->trailing_comment = std::move(comment);
 				}
 				if (!eof() && !consume_newline()) return false;
@@ -193,10 +193,7 @@ private:
 	void skip_spaces() {
 		while (peek() == ' ' || peek() == '\t') advance();
 	}
-	bool read_comment(TomlComment &comment, bool trailing) {
-		const auto offset = m_pos;
-		const auto line = m_line;
-		const auto column = m_column;
+	bool read_comment(TomlComment &comment) {
 		if (peek() != '#') return false;
 		advance();
 		const auto begin = m_pos;
@@ -205,13 +202,7 @@ private:
 			if ((c < 0x20 && c != '\t') || c == 0x7f) return false;
 			advance();
 		}
-		comment = {
-			std::string(m_input.substr(begin, m_pos - begin)),
-			offset,
-			line,
-			column,
-			trailing
-		};
+		comment.text = std::string(m_input.substr(begin, m_pos - begin));
 		return true;
 	}
 
@@ -479,7 +470,7 @@ private:
 			skip_spaces();
 			if (peek() == '#') {
 				TomlComment comment;
-				if (!read_comment(comment, trailing)) return false;
+				if (!read_comment(comment)) return false;
 				if (trailing && last) {
 					last->trailing_comment = std::move(comment);
 				} else {
