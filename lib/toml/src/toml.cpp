@@ -514,8 +514,15 @@ private:
 			}
 			if (peek() != ',') return false;
 			advance();
-			if (!skip_array_space(value, nullptr, pending, false)) return false;
+			if (!skip_array_space(
+				value,
+				&value.array().back(),
+				pending,
+				true)) {
+				return false;
+			}
 			if (peek() == ']') {
+				value.array_trailing_comma = true;
 				value.dangling_comments = std::move(pending);
 				advance();
 				return true;
@@ -1386,7 +1393,9 @@ static void serialize_value(std::ostream &output, const TomlValue &value) {
 				append_comments(output, element.leading_comments, "  ");
 				output.write("  ", 2);
 				serialize_value(output, element);
-				if (i + 1 < value.array().size()) output.put(',');
+				if (i + 1 < value.array().size() || value.array_trailing_comma) {
+					output.put(',');
+				}
 				append_trailing_comment(output, element.trailing_comment);
 				output.put('\n');
 			}
@@ -1399,6 +1408,7 @@ static void serialize_value(std::ostream &output, const TomlValue &value) {
 			if (i > 0) output.write(", ", 2);
 			serialize_value(output, value.array()[i]);
 		}
+		if (value.array_trailing_comma) output.put(',');
 		output.put(']');
 		return;
 	}

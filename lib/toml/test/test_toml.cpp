@@ -421,6 +421,119 @@ TEST_CASE("TOML table formats preserve their spelling", "[toml][writer][table]")
 	}
 }
 
+TEST_CASE("TOML comments preserve their attachment and spelling", "[toml][writer][comment]") {
+	SECTION("document and root values") {
+		check_round_trip(
+			"# document comment\n"
+			"# before root value\n"
+			"root = 1 # after root value\n"
+			"# before second root value\n"
+			"enabled = true # after second root value\n"
+			"# trailing document comment one\n"
+			"# trailing document comment two\n");
+	}
+
+	SECTION("standard and nested tables") {
+		check_round_trip(
+			"# before table\n"
+			"[table] # after table\n"
+			"# before table value\n"
+			"value = 1 # after table value\n"
+			"\n"
+			"# before nested table\n"
+			"[table.nested] # after nested table\n"
+			"# before nested value\n"
+			"enabled = true # after nested value\n");
+	}
+
+	SECTION("dotted keys") {
+		check_round_trip(
+			"# before dotted name\n"
+			"fruit.name = \"apple\" # after dotted name\n"
+			"# before dotted color\n"
+			"fruit.physical.color = \"red\" # after dotted color\n"
+			"# before dotted shape\n"
+			"fruit.physical.shape = \"round\" # after dotted shape\n");
+	}
+
+	SECTION("inline tables") {
+		check_round_trip(
+			"# before inline table\n"
+			"point = {x = 1, y = 2, metadata = {label = \"origin\"}}"
+			" # after inline table\n");
+	}
+
+	SECTION("quoted explicit empty tables") {
+		check_round_trip(
+			"# before empty table\n"
+			"[\"implicit.parent\".\"empty table\"] # after empty table\n");
+	}
+
+	SECTION("arrays of tables") {
+		check_round_trip(
+			"# before first product\n"
+			"[[products]] # after first product\n"
+			"# before first name\n"
+			"name = \"Hammer\" # after first name\n"
+			"\n"
+			"# before second product\n"
+			"[[products]] # after second product\n"
+			"# before second name\n"
+			"name = \"Nail\" # after second name\n");
+	}
+
+	SECTION("nested tables within table-array elements") {
+		check_round_trip(
+			"# before fruit\n"
+			"[[fruits]] # after fruit\n"
+			"name = \"apple\" # after fruit name\n"
+			"\n"
+			"# before physical table\n"
+			"[fruits.physical] # after physical table\n"
+			"color = \"red\" # after color\n"
+			"\n"
+			"# before variety\n"
+			"[[fruits.varieties]] # after variety\n"
+			"name = \"red delicious\" # after variety name\n");
+	}
+}
+
+TEST_CASE("TOML multiline array comments preserve their attachment", "[toml][writer][comment][array]") {
+	SECTION("comments before and behind every scalar value") {
+		check_round_trip(
+			"# before array\n"
+			"values = [\n"
+			"  # before one\n"
+			"  1, # after one\n"
+			"  # before two\n"
+			"  \"two\", # after two\n"
+			"  # before three\n"
+			"  true, # after three\n"
+			"  # before closing bracket\n"
+			"] # after array\n");
+	}
+
+	SECTION("comments behind compound values") {
+		check_round_trip(
+			"values = [\n"
+			"  {name = \"one\"}, # after inline table\n"
+			"  [1, 2], # after nested array\n"
+			"  {name = \"three\"}, # after second inline table\n"
+			"] # after compound array\n");
+	}
+
+	SECTION("comments in an empty multiline array") {
+		check_round_trip(
+			"empty = [\n"
+			"  # inside empty array\n"
+			"] # after empty array\n");
+	}
+
+	SECTION("compact array trailing comma") {
+		check_round_trip("values = [1, 2, 3,]\n");
+	}
+}
+
 TEST_CASE("TOML writer canonically serializes an ordered document tree", "[toml][writer]") {
 	TomlDocument document;
 

@@ -132,6 +132,7 @@ struct TomlValue {
 	bool dotted_table = false;
 	bool inline_table = false;
 	bool array_of_tables = false;
+	bool array_trailing_comma = false;
 
 	TomlValue *find(std::string_view key) noexcept;
 	const TomlValue *find(std::string_view key) const noexcept;
